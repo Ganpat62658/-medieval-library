@@ -36,6 +36,12 @@ export default function LibraryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [profileMissing, setProfileMissing] = useState(false);
   const shelfRef = React.useRef<VirtualizedShelfHandle>(null);
+  // Blocks shelf clicks for 400ms after any modal closes — prevents ghost taps on mobile
+  const clickGuard = React.useRef(false);
+  const guardClicks = () => {
+    clickGuard.current = true;
+    setTimeout(() => { clickGuard.current = false; }, 400);
+  };
   const [directOpen, setDirectOpen] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('directOpen') === 'true';
     return false;
@@ -118,6 +124,7 @@ export default function LibraryPage() {
   }, [books, directOpen, bookmarkPrompt]);
 
   const handleSlotClick = useCallback((rowIndex: number, colIndex: number, _: SlotType) => {
+    if (clickGuard.current) return; // block ghost taps
     const row = rows.find((r) => r.rowIndex === rowIndex);
     if (!row) return;
     setUploadTarget({ rowIndex, colIndex, rowId: row.id });
@@ -191,7 +198,7 @@ service cloud.firestore {
               ref={shelfRef}
               rows={rows} books={books} userRole={userProfile.role}
               highlightedBookId={highlightedBookId}
-              onBookClick={(book) => setPromptBook(book)}
+              onBookClick={(book) => { if (clickGuard.current) return; setPromptBook(book); }}
               onSlotClick={handleSlotClick}
               onEditRow={canEdit ? (row) => setEditingRow(row) : undefined}
             />
@@ -219,8 +226,8 @@ service cloud.firestore {
           bookId={promptBook.id}
           bookTitle={promptBook.title}
           userId={authUser!.uid}
-          onOpen={(page) => { setOpenBook({ book: promptBook, page }); setPromptBook(null); }}
-          onCancel={() => setPromptBook(null)}
+          onOpen={(page) => { guardClicks(); setOpenBook({ book: promptBook, page }); setPromptBook(null); }}
+          onCancel={() => { guardClicks(); setPromptBook(null); }}
         />
       )}
       {openBook && <EReader book={openBook.book} userId={authUser!.uid} libraryId={libraryId} initialPage={openBook.page} onClose={() => setOpenBook(null)} />}

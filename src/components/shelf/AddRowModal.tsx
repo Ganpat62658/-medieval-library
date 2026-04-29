@@ -52,7 +52,7 @@ export default function AddRowModal({ libraryId, currentRowCount, onClose }: Add
   };
 
   return (
-    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+    <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         <h2 style={title}>📚 Add a New Shelf Row</h2>
         <p style={subtitle}>Each row holds a set of columns (book slots).</p>

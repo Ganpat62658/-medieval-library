@@ -62,6 +62,14 @@ html, body {
   color: var(--parchment);
   font-family: var(--font-body);
   overflow-x: hidden;
+  /* Eliminate 300ms tap delay on mobile */
+  touch-action: manipulation;
+}
+
+/* Prevent ghost clicks from passing through modals */
+[data-modal="true"] {
+  touch-action: none;
+  pointer-events: all;
 }
 
 /* =============================================

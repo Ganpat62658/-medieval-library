@@ -122,7 +122,7 @@ export default function UploadBookModal({
   };
 
   return (
-    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+    <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         <h2 style={titleStyle}>📖 Add a Book</h2>
         <p style={subtitleStyle}>Row {rowIndex + 1} · Column {colIndex + 1}</p>

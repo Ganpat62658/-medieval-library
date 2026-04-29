@@ -27,7 +27,7 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
   }, [bookId, userId]);
 
   if (loading) return (
-    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+    <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={{ color: '#C8A84B', fontFamily: "'Cinzel',serif", fontSize: 14 }}>🕯️ Opening...</div>
     </div>
   );
@@ -39,7 +39,7 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
   const lastBookmark = [...bookmarks].sort((a, b) => b.pageNumber - a.pageNumber)[0];
 
   return (
-    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+    <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         <h2 style={titleS}>📖 Continue Reading?</h2>
         <p style={subtitleS}>{bookTitle}</p>
