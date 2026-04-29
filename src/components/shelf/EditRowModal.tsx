@@ -89,7 +89,7 @@ export default function EditRowModal({ libraryId, row, onClose }: EditRowModalPr
   const slotEntries = Object.entries(slots).sort(([a], [b]) => parseInt(a) - parseInt(b));
 
   return (
-    <div style={overlay}>
+    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         <h2 style={titleStyle}>✏️ Edit Row</h2>
 
@@ -173,7 +173,7 @@ export default function EditRowModal({ libraryId, row, onClose }: EditRowModalPr
   );
 }
 
-const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(10,5,2,0.9)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 };
+const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(10,5,2,0.9)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 };
 const modal: React.CSSProperties = { background: 'linear-gradient(160deg, #2C1A0E 0%, #1A0E06 100%)', border: '1px solid rgba(200,168,75,0.3)', borderRadius: 8, padding: '28px 26px', maxWidth: 480, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.8)', maxHeight: '90vh', overflowY: 'auto' };
 const titleStyle: React.CSSProperties = { fontFamily: "'Cinzel', serif", fontSize: 20, color: '#C8A84B', margin: '0 0 20px', textAlign: 'center' };
 const field: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 };

@@ -71,7 +71,7 @@ export default function BookmarkModal({ book, currentPage, userId, libraryId, on
   };
 
   return (
-    <div style={overlay} onClick={e => e.stopPropagation()}>
+    <div style={overlay} onClick={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}>
       <div style={modal}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -175,7 +175,7 @@ export default function BookmarkModal({ book, currentPage, userId, libraryId, on
   );
 }
 
-const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(10,5,2,0.88)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 };
+const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(10,5,2,0.9)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, touchAction: 'none' };
 const modal: React.CSSProperties = { background: 'linear-gradient(160deg,#2C1A0E,#1A0E06)', border: '1px solid rgba(200,168,75,0.3)', borderRadius: 8, padding: '22px 20px', maxWidth: 400, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.85)', maxHeight: '88vh', overflowY: 'auto' };
 const titleS: React.CSSProperties = { fontFamily: "'Cinzel',serif", fontSize: 17, color: '#C8A84B', margin: 0 };
 const closeBtn: React.CSSProperties = { background: 'none', border: 'none', color: 'rgba(212,196,160,0.4)', fontSize: 18, cursor: 'pointer', padding: 0, lineHeight: 1 };

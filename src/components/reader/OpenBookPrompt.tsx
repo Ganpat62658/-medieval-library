@@ -27,7 +27,7 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
   }, [bookId, userId]);
 
   if (loading) return (
-    <div style={overlay}>
+    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={{ color: '#C8A84B', fontFamily: "'Cinzel',serif", fontSize: 14 }}>🕯️ Opening...</div>
     </div>
   );
@@ -39,13 +39,13 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
   const lastBookmark = [...bookmarks].sort((a, b) => b.pageNumber - a.pageNumber)[0];
 
   return (
-    <div style={overlay}>
+    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         <h2 style={titleS}>📖 Continue Reading?</h2>
         <p style={subtitleS}>{bookTitle}</p>
 
         {/* Resume last position */}
-        <button style={primaryBtn} onClick={e => { e.stopPropagation(); onOpen(lastBookmark.pageNumber); }}>
+        <button style={primaryBtn} onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); onOpen(lastBookmark.pageNumber); }} onClick={e => { e.stopPropagation(); onOpen(lastBookmark.pageNumber); }}>
           <span style={{ fontSize: 16 }}>🔖</span>
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>Resume at Page {lastBookmark.pageNumber}</div>
@@ -65,7 +65,7 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
               {bookmarks
                 .filter(b => b.id !== lastBookmark.id)
                 .map(bm => (
-                  <button key={bm.id} style={secondaryBtn} onClick={e => { e.stopPropagation(); onOpen(bm.pageNumber); }}>
+                  <button key={bm.id} style={secondaryBtn} onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); onOpen(bm.pageNumber); }} onClick={e => { e.stopPropagation(); onOpen(bm.pageNumber); }}>
                     <span style={{ color: '#C8A84B', fontFamily: "'Cinzel',serif", fontSize: 12 }}>Page {bm.pageNumber}</span>
                     {bm.note && <span style={{ fontSize: 11, color: 'rgba(212,196,160,0.45)', marginLeft: 8 }}>{bm.note}</span>}
                   </button>
@@ -75,17 +75,17 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
         )}
 
         {/* Start from beginning */}
-        <button style={startFreshBtn} onClick={e => { e.stopPropagation(); onOpen(1); }}>
+        <button style={startFreshBtn} onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); onOpen(1); }} onClick={e => { e.stopPropagation(); onOpen(1); }}>
           Start from Beginning
         </button>
 
-        <button style={cancelBtn} onClick={e => { e.stopPropagation(); onCancel(); }}>Cancel</button>
+        <button style={cancelBtn} onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); onCancel(); }} onClick={e => { e.stopPropagation(); onCancel(); }}>Cancel</button>
       </div>
     </div>
   );
 }
 
-const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 190, background: 'rgba(10,5,2,0.9)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 };
+const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 99998, background: 'rgba(10,5,2,0.92)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, touchAction: 'none' };
 const modal: React.CSSProperties = { background: 'linear-gradient(160deg,#2C1A0E,#1A0E06)', border: '1px solid rgba(200,168,75,0.35)', borderRadius: 8, padding: '28px 24px', maxWidth: 380, width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: 10 };
 const titleS: React.CSSProperties = { fontFamily: "'Cinzel',serif", fontSize: 18, color: '#C8A84B', margin: 0, textAlign: 'center' };
 const subtitleS: React.CSSProperties = { fontSize: 13, color: 'rgba(212,196,160,0.45)', textAlign: 'center', margin: 0, fontStyle: 'italic' };

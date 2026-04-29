@@ -122,7 +122,7 @@ export default function UploadBookModal({
   };
 
   return (
-    <div style={overlay}>
+    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         <h2 style={titleStyle}>📖 Add a Book</h2>
         <p style={subtitleStyle}>Row {rowIndex + 1} · Column {colIndex + 1}</p>
@@ -249,7 +249,7 @@ export default function UploadBookModal({
 }
 
 const overlay: React.CSSProperties = {
-  position: 'fixed', inset: 0, zIndex: 100,
+  position: 'fixed', inset: 0, zIndex: 99999,
   background: 'rgba(10,5,2,0.9)', backdropFilter: 'blur(4px)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
 };
