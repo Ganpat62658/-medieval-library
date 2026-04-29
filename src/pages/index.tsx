@@ -107,14 +107,14 @@ export default function LibraryPage() {
       return; // Don't scroll/sparkle when opening — reader covers the shelf anyway
     }
 
-    // action === 'scroll': scroll to the row, highlight, sparkle
-    shelfRef.current?.scrollToRowIndex(result.rowIndex);
+    // action === 'scroll': scroll to the row AND column, then sparkle
+    shelfRef.current?.scrollToColumn(result.rowIndex, result.colIndex);
     setHighlightedBookId(result.bookId);
     setTimeout(() => {
       const el = document.querySelector(`[data-book-id="${result.bookId}"]`) as HTMLElement | null;
       if (el) playSparkle(el);
-    }, 500);
-    setTimeout(() => setHighlightedBookId(null), 1600);
+    }, 700); // slightly longer — wait for both vertical + horizontal scroll
+    setTimeout(() => setHighlightedBookId(null), 1800);
   }, [books, directOpen, bookmarkPrompt]);
 
   const handleSlotClick = useCallback((rowIndex: number, colIndex: number, _: SlotType) => {
@@ -161,13 +161,19 @@ service cloud.firestore {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#1A0E06' }}>
-      {/* Top bar */}
-      <header style={{ height: 60, background: '#2C1A0E', borderBottom: '1px solid rgba(200,168,75,0.2)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12, flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
-        <h1 style={{ fontFamily: "'Cinzel',serif", fontSize: 18, color: '#C8A84B', margin: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>📚 The Library</h1>
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+      {/* Top bar — stacks on mobile */}
+      <header style={{ background: '#2C1A0E', borderBottom: '1px solid rgba(200,168,75,0.2)', flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
+        {/* Row 1: title + hamburger */}
+        <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px 6px', gap: 10 }}>
+          <h1 style={{ fontFamily: "'Cinzel',serif", fontSize: 18, color: '#C8A84B', margin: 0, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            📚 The Library
+          </h1>
+          <button onClick={() => setMenuOpen(true)} style={{ background: 'none', border: 'none', color: '#C8A84B', fontSize: 24, cursor: 'pointer', flexShrink: 0, padding: '0 4px' }}>☰</button>
+        </div>
+        {/* Row 2: search bar — full width */}
+        <div style={{ padding: '0 14px 10px' }}>
           <SearchBar libraryId={libraryId} rows={rows} onResultSelect={(m, a) => handleSearchResult(m, a)} onAdvancedToggle={() => setShowAdvancedSearch(v => !v)} directOpen={directOpen} />
         </div>
-        <button onClick={() => setMenuOpen(true)} style={{ background: 'none', border: 'none', color: '#C8A84B', fontSize: 22, cursor: 'pointer', flexShrink: 0 }}>☰</button>
       </header>
 
       {/* Shelf */}

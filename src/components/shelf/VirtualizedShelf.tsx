@@ -19,6 +19,7 @@ interface VirtualizedShelfProps {
 
 export interface VirtualizedShelfHandle {
   scrollToRowIndex: (rowIndex: number) => void;
+  scrollToColumn: (rowIndex: number, colIndex: number) => void;
 }
 
 interface ShelfRowProps {
@@ -29,10 +30,16 @@ interface ShelfRowProps {
   onBookClick: (book: Book) => void;
   onSlotClick: (rowIndex: number, colIndex: number, slotType: SlotType) => void;
   onEditRow?: (row: ShelfRow) => void;
+  onScrollRef?: (el: HTMLDivElement | null) => void;
 }
 
-const ShelfRowComponent: React.FC<ShelfRowProps> = ({ row, books, userRole, highlightedBookId, onBookClick, onSlotClick, onEditRow }) => {
+const ShelfRowComponent: React.FC<ShelfRowProps> = ({ row, books, userRole, highlightedBookId, onBookClick, onSlotClick, onEditRow, onScrollRef }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Forward ref to parent for programmatic horizontal scrolling
+  const setScrollRef = React.useCallback((el: HTMLDivElement | null) => {
+    (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    onScrollRef?.(el);
+  }, [onScrollRef]);
   const [showHint, setShowHint] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const canEdit = userRole === 'owner' || userRole === 'editor';
@@ -75,7 +82,7 @@ const ShelfRowComponent: React.FC<ShelfRowProps> = ({ row, books, userRole, high
 
         {/* Scrollable book slots */}
         <div
-          ref={scrollRef} onScroll={handleScroll}
+          ref={setScrollRef} onScroll={handleScroll}
           style={{ display: 'flex', alignItems: 'flex-end', overflowX: isMobile ? 'auto' : 'visible', overflowY: 'visible', paddingLeft: 8, paddingTop: 8, gap: 6, flexWrap: isMobile ? 'nowrap' : 'wrap', flex: 1, msOverflowStyle: 'none', scrollbarWidth: 'none' }}
         >
           {slots.map(([colKey, slot]) => {
@@ -120,9 +127,24 @@ const VirtualizedShelf = forwardRef<VirtualizedShelfHandle, VirtualizedShelfProp
   ({ rows, books, userRole, highlightedBookId, onBookClick, onSlotClick, onEditRow }, ref) => {
   const virtuosoRef = React.useRef<VirtuosoHandle>(null);
 
+  const rowScrollRefs = React.useRef<Map<number, HTMLDivElement>>(new Map());
+
   useImperativeHandle(ref, () => ({
     scrollToRowIndex: (rowIndex: number) => {
       virtuosoRef.current?.scrollToIndex({ index: rowIndex, behavior: 'smooth', align: 'center' });
+    },
+    scrollToColumn: (rowIndex: number, colIndex: number) => {
+      // First scroll the virtuoso list to the row
+      virtuosoRef.current?.scrollToIndex({ index: rowIndex, behavior: 'smooth', align: 'center' });
+      // Then after the row is rendered, scroll horizontally to the column
+      setTimeout(() => {
+        const scrollEl = rowScrollRefs.current.get(rowIndex);
+        if (!scrollEl) return;
+        // Each slot is 48px wide + 6px gap = 54px, plus 36px row label
+        const slotWidth = 54;
+        const targetScrollLeft = colIndex * slotWidth;
+        scrollEl.scrollTo({ left: targetScrollLeft, behavior: 'smooth' });
+      }, 500);
     },
   }));
 
@@ -141,6 +163,10 @@ const VirtualizedShelf = forwardRef<VirtualizedShelfHandle, VirtualizedShelfProp
             highlightedBookId={highlightedBookId}
             onBookClick={onBookClick} onSlotClick={onSlotClick}
             onEditRow={onEditRow}
+            onScrollRef={(el) => {
+              if (el) rowScrollRefs.current.set(row.rowIndex, el);
+              else rowScrollRefs.current.delete(row.rowIndex);
+            }}
           />
         );
       }}
