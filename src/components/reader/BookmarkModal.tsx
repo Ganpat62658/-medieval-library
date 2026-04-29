@@ -71,7 +71,7 @@ export default function BookmarkModal({ book, currentPage, userId, libraryId, on
   };
 
   return (
-    <div style={overlay}>
+    <div style={overlay} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>

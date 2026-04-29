@@ -91,7 +91,7 @@ const ShelfRowComponent: React.FC<ShelfRowProps> = ({ row, books, userRole, high
             const book = slot.type === 'book' && slot.bookId ? books[slot.bookId] : null;
 
             return (
-              <div key={colKey} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+              <div key={colKey} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                 <div style={{ height: 180, display: 'flex', alignItems: 'flex-end' }}>
                   {slot.type === 'book' && book ? (
                     <BookSpine book={book} isHighlighted={isHighlighted} onClick={() => onBookClick(book)} />

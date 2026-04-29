@@ -47,12 +47,12 @@ const BookSpine: React.FC<BookSpineProps> = ({ book, isHighlighted, onClick }) =
     <div
       ref={spineRef}
       className="book-spine leather-texture"
-      onClick={onClick}
+      onClick={e => { e.stopPropagation(); onClick(); }}
       data-book-id={book.id}
       role="button"
       tabIndex={0}
       aria-label={`Open ${book.title}`}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      onKeyDown={(e) => { e.stopPropagation(); e.key === 'Enter' && onClick(); }}
       style={{
         // Use spine image if provided, otherwise leather texture with color
         backgroundImage: hasSpineImage

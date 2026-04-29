@@ -45,7 +45,7 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
         <p style={subtitleS}>{bookTitle}</p>
 
         {/* Resume last position */}
-        <button style={primaryBtn} onClick={() => onOpen(lastBookmark.pageNumber)}>
+        <button style={primaryBtn} onClick={e => { e.stopPropagation(); onOpen(lastBookmark.pageNumber); }}>
           <span style={{ fontSize: 16 }}>🔖</span>
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>Resume at Page {lastBookmark.pageNumber}</div>
@@ -65,7 +65,7 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
               {bookmarks
                 .filter(b => b.id !== lastBookmark.id)
                 .map(bm => (
-                  <button key={bm.id} style={secondaryBtn} onClick={() => onOpen(bm.pageNumber)}>
+                  <button key={bm.id} style={secondaryBtn} onClick={e => { e.stopPropagation(); onOpen(bm.pageNumber); }}>
                     <span style={{ color: '#C8A84B', fontFamily: "'Cinzel',serif", fontSize: 12 }}>Page {bm.pageNumber}</span>
                     {bm.note && <span style={{ fontSize: 11, color: 'rgba(212,196,160,0.45)', marginLeft: 8 }}>{bm.note}</span>}
                   </button>
@@ -75,11 +75,11 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
         )}
 
         {/* Start from beginning */}
-        <button style={startFreshBtn} onClick={() => onOpen(1)}>
+        <button style={startFreshBtn} onClick={e => { e.stopPropagation(); onOpen(1); }}>
           Start from Beginning
         </button>
 
-        <button style={cancelBtn} onClick={onCancel}>Cancel</button>
+        <button style={cancelBtn} onClick={e => { e.stopPropagation(); onCancel(); }}>Cancel</button>
       </div>
     </div>
   );

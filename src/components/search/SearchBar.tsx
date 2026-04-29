@@ -142,7 +142,7 @@ export default function SearchBar({ libraryId, rows, onResultSelect, onAdvancedT
 
       {/* Confirm dialog — full screen overlay on mobile */}
       {confirm && (
-        <div style={overlayS} onPointerDown={e => e.target === e.currentTarget && setConfirm(null)}>
+        <div style={overlayS} onPointerDown={e => { e.stopPropagation(); if (e.target === e.currentTarget) setConfirm(null); }}>
           <div style={dialogS}>
             <p style={{ fontFamily: "'Cinzel',serif", fontSize: 17, color: '#C8A84B', margin: '0 0 6px' }}>Found it!</p>
             <p style={{ fontSize: 16, color: '#F4E8C1', fontFamily: "'Crimson Text',serif", fontWeight: 600, margin: '0 0 4px', textAlign: 'center' }}>
@@ -155,9 +155,9 @@ export default function SearchBar({ libraryId, rows, onResultSelect, onAdvancedT
               Matched: {confirm.matchReasons.join(', ')}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-              <button style={goldBtn} onPointerDown={() => handleConfirm('open')}>📖 Open Book</button>
-              <button style={outlineBtn} onPointerDown={() => handleConfirm('scroll')}>✦ Show on Shelf</button>
-              <button style={cancelBtn} onPointerDown={() => setConfirm(null)}>Cancel</button>
+              <button style={goldBtn} onPointerDown={e => { e.stopPropagation(); handleConfirm('open'); }}>📖 Open Book</button>
+              <button style={outlineBtn} onPointerDown={e => { e.stopPropagation(); handleConfirm('scroll'); }}>✦ Show on Shelf</button>
+              <button style={cancelBtn} onPointerDown={e => { e.stopPropagation(); setConfirm(null); }}>Cancel</button>
             </div>
           </div>
         </div>
