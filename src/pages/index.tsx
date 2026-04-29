@@ -40,7 +40,7 @@ export default function LibraryPage() {
   const clickGuard = React.useRef(false);
   const guardClicks = () => {
     clickGuard.current = true;
-    setTimeout(() => { clickGuard.current = false; }, 400);
+    setTimeout(() => { clickGuard.current = false; }, 4000);
   };
   const [directOpen, setDirectOpen] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('directOpen') === 'true';
