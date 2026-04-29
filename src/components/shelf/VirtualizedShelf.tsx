@@ -33,7 +33,7 @@ interface ShelfRowProps {
   onScrollRef?: (el: HTMLDivElement | null) => void;
 }
 
-const ShelfRowComponent: React.FC<ShelfRowProps> = ({ row, books, userRole, highlightedBookId, onBookClick, onSlotClick, onEditRow, onScrollRef }) => {
+const ShelfRowComponent: React.FC<ShelfRowProps> = React.memo(function ShelfRowComponent({ row, books, userRole, highlightedBookId, onBookClick, onSlotClick, onEditRow, onScrollRef }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Forward ref to parent for programmatic horizontal scrolling
   const setScrollRef = React.useCallback((el: HTMLDivElement | null) => {
@@ -121,7 +121,7 @@ const ShelfRowComponent: React.FC<ShelfRowProps> = ({ row, books, userRole, high
       </div>
     </div>
   );
-};
+});
 
 const VirtualizedShelf = forwardRef<VirtualizedShelfHandle, VirtualizedShelfProps>(
   ({ rows, books, userRole, highlightedBookId, onBookClick, onSlotClick, onEditRow }, ref) => {
@@ -153,8 +153,9 @@ const VirtualizedShelf = forwardRef<VirtualizedShelfHandle, VirtualizedShelfProp
       ref={virtuosoRef}
       style={{ height: '100%', width: '100%' }}
       totalCount={rows.length}
-      overscan={1}
-      itemContent={(index) => {
+      overscan={2}
+      increaseViewportBy={{ top: 300, bottom: 300 }}
+      itemContent={React.useCallback((index) => {
         const row = rows[index];
         if (!row) return null;
         return (
@@ -169,7 +170,7 @@ const VirtualizedShelf = forwardRef<VirtualizedShelfHandle, VirtualizedShelfProp
             }}
           />
         );
-      }}
+      }, [rows, books, userRole, highlightedBookId, onBookClick, onSlotClick, onEditRow])}
     />
   );
 });

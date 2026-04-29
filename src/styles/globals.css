@@ -66,6 +66,12 @@ html, body {
   touch-action: manipulation;
 }
 
+/* Apply to ALL interactive elements globally — no exceptions */
+button, a, [role="button"], input, select, textarea {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* Prevent ghost clicks from passing through modals */
 [data-modal="true"] {
   touch-action: none;

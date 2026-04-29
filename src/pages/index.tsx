@@ -36,12 +36,10 @@ export default function LibraryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [profileMissing, setProfileMissing] = useState(false);
   const shelfRef = React.useRef<VirtualizedShelfHandle>(null);
-  // Blocks shelf clicks for 400ms after any modal closes — prevents ghost taps on mobile
-  const clickGuard = React.useRef(false);
-  const guardClicks = () => {
-    clickGuard.current = true;
-    setTimeout(() => { clickGuard.current = false; }, 4000);
-  };
+  // Timestamp-based guard — blocks shelf clicks for 500ms after any modal closes
+  const clickGuardTime = React.useRef(0);
+  const guardClicks = () => { clickGuardTime.current = Date.now(); };
+  const isGuarded = () => Date.now() - clickGuardTime.current < 500;
   const [directOpen, setDirectOpen] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('directOpen') === 'true';
     return false;
@@ -124,7 +122,7 @@ export default function LibraryPage() {
   }, [books, directOpen, bookmarkPrompt]);
 
   const handleSlotClick = useCallback((rowIndex: number, colIndex: number, _: SlotType) => {
-    if (clickGuard.current) return; // block ghost taps
+    if (isGuarded()) return; // block ghost taps
     const row = rows.find((r) => r.rowIndex === rowIndex);
     if (!row) return;
     setUploadTarget({ rowIndex, colIndex, rowId: row.id });
