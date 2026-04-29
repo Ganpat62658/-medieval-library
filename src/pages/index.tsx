@@ -196,7 +196,7 @@ service cloud.firestore {
               ref={shelfRef}
               rows={rows} books={books} userRole={userProfile.role}
               highlightedBookId={highlightedBookId}
-              onBookClick={(book) => { if (clickGuard.current) return; setPromptBook(book); }}
+              onBookClick={(book) => { if (isGuarded()) return; setPromptBook(book); }}
               onSlotClick={handleSlotClick}
               onEditRow={canEdit ? (row) => setEditingRow(row) : undefined}
             />
