@@ -2,6 +2,7 @@
 // Lets owners edit a row: rename it, add/remove columns, and set any slot to dummy/empty
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ShelfRow, SlotType } from '@/lib/types';
@@ -88,8 +89,8 @@ export default function EditRowModal({ libraryId, row, onClose }: EditRowModalPr
 
   const slotEntries = Object.entries(slots).sort(([a], [b]) => parseInt(a) - parseInt(b));
 
-  return (
-    <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         <h2 style={titleStyle}>✏️ Edit Row</h2>
 
@@ -170,7 +171,7 @@ export default function EditRowModal({ libraryId, row, onClose }: EditRowModalPr
         </div>
       </div>
     </div>
-  );
+  , document.body);
 }
 
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(10,5,2,0.9)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 };

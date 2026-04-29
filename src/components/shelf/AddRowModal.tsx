@@ -1,5 +1,6 @@
 // src/components/shelf/AddRowModal.tsx
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, increment } from 'firebase/firestore';
 
@@ -51,8 +52,8 @@ export default function AddRowModal({ libraryId, currentRowCount, onClose }: Add
     }
   };
 
-  return (
-    <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         <h2 style={title}>📚 Add a New Shelf Row</h2>
         <p style={subtitle}>Each row holds a set of columns (book slots).</p>
@@ -114,7 +115,7 @@ export default function AddRowModal({ libraryId, currentRowCount, onClose }: Add
         </div>
       </div>
     </div>
-  );
+  , document.body);
 }
 
 const overlay: React.CSSProperties = {

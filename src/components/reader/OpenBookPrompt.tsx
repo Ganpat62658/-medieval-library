@@ -2,6 +2,7 @@
 // Shown before opening a book — lets user choose to resume a bookmark or start fresh
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getBookmarks, BookmarkData } from '@/lib/bookmarks';
 
 interface OpenBookPromptProps {
@@ -30,7 +31,7 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
     <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={{ color: '#C8A84B', fontFamily: "'Cinzel',serif", fontSize: 14 }}>🕯️ Opening...</div>
     </div>
-  );
+  , document.body);
 
   // No bookmarks → already called onOpen(1) above
   if (bookmarks.length === 0) return null;
@@ -38,8 +39,8 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
   // Most recent bookmark = highest page number
   const lastBookmark = [...bookmarks].sort((a, b) => b.pageNumber - a.pageNumber)[0];
 
-  return (
-    <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         <h2 style={titleS}>📖 Continue Reading?</h2>
         <p style={subtitleS}>{bookTitle}</p>
@@ -82,7 +83,7 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
         <button style={cancelBtn} onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); onCancel(); }} onClick={e => { e.stopPropagation(); onCancel(); }}>Cancel</button>
       </div>
     </div>
-  );
+  , document.body);
 }
 
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 99998, background: 'rgba(10,5,2,0.92)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, touchAction: 'none' };

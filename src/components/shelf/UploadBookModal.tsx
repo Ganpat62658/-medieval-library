@@ -4,6 +4,7 @@
 // - Other members: reads from the shareable link (Google Drive / Dropbox)
 
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { saveBookLocally } from '@/lib/localBooks';
@@ -121,8 +122,8 @@ export default function UploadBookModal({
     }
   };
 
-  return (
-    <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
       <div style={modal}>
         <h2 style={titleStyle}>📖 Add a Book</h2>
         <p style={subtitleStyle}>Row {rowIndex + 1} · Column {colIndex + 1}</p>
@@ -245,7 +246,7 @@ export default function UploadBookModal({
         )}
       </div>
     </div>
-  );
+  , document.body);
 }
 
 const overlay: React.CSSProperties = {

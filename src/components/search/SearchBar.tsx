@@ -153,75 +153,46 @@ export default function SearchBar({ libraryId, rows, onResultSelect, onAdvancedT
   );
 }
 
-// Separate component rendered at body level to escape all stacking contexts
+// Portal-based dialog — renders directly on document.body, completely outside the shelf DOM
 function ConfirmDialog({ match, onOpen, onScroll, onCancel }: {
   match: SearchMatch;
   onOpen: () => void;
   onScroll: () => void;
   onCancel: () => void;
 }) {
-  // Prevent any touch/click from reaching elements below
-  const block = (e: React.SyntheticEvent) => { e.stopPropagation(); e.preventDefault(); };
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
+  if (!mounted) return null;
 
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 99999,
-        background: 'rgba(10,5,2,0.92)',
-        backdropFilter: 'blur(6px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 24,
-        // Block ALL pointer events from reaching anything below
-        touchAction: 'none',
-      }}
-      onTouchStart={block}
-      onTouchEnd={block}
-      onMouseDown={block}
-      onClick={block}
-    >
-      <div
-        style={{
-          background: 'linear-gradient(160deg,#2C1A0E,#1A0E06)',
-          border: '1px solid rgba(200,168,75,0.35)',
-          borderRadius: 12, padding: '28px 24px',
-          maxWidth: 340, width: '100%',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.95)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-        }}
-        onTouchStart={e => e.stopPropagation()}
-        onClick={e => e.stopPropagation()}
-      >
+  const dialog = (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 99999,
+      background: 'rgba(10,5,2,0.92)',
+      backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24, touchAction: 'none',
+    }}>
+      <div style={{
+        background: 'linear-gradient(160deg,#2C1A0E,#1A0E06)',
+        border: '1px solid rgba(200,168,75,0.35)',
+        borderRadius: 12, padding: '28px 24px',
+        maxWidth: 340, width: '100%',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.95)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+      }}>
         <p style={{ fontFamily: "'Cinzel',serif", fontSize: 17, color: '#C8A84B', margin: 0 }}>Found it!</p>
-        <p style={{ fontSize: 15, color: '#F4E8C1', fontFamily: "'Crimson Text',serif", fontWeight: 600, margin: 0, textAlign: 'center' }}>
-          {match.title}
-        </p>
-        <p style={{ fontSize: 12, color: 'rgba(200,168,75,0.4)', margin: '0 0 8px' }}>
-          Row {match.rowIndex + 1} · Col {match.colIndex + 1}
-        </p>
-        <button
-          style={cdGold}
-          onPointerUp={() => onOpen()}
-          onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); onOpen(); }}
-        >
-          📖 Open Book
-        </button>
-        <button
-          style={cdOutline}
-          onPointerUp={() => onScroll()}
-          onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); onScroll(); }}
-        >
-          ✦ Show on Shelf
-        </button>
-        <button
-          style={cdCancel}
-          onPointerUp={() => onCancel()}
-          onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); onCancel(); }}
-        >
-          Cancel
-        </button>
+        <p style={{ fontSize: 15, color: '#F4E8C1', fontFamily: "'Crimson Text',serif", fontWeight: 600, margin: 0, textAlign: 'center' }}>{match.title}</p>
+        <p style={{ fontSize: 12, color: 'rgba(200,168,75,0.4)', margin: '0 0 4px' }}>Row {match.rowIndex + 1} · Col {match.colIndex + 1}</p>
+        <button style={cdGold} onClick={() => onOpen()}>📖 Open Book</button>
+        <button style={cdOutline} onClick={() => onScroll()}>✦ Show on Shelf</button>
+        <button style={cdCancel} onClick={() => onCancel()}>Cancel</button>
       </div>
     </div>
   );
+
+  // ReactDOM.createPortal renders outside the current DOM tree entirely
+  const { createPortal } = require('react-dom');
+  return createPortal(dialog, document.body);
 }
 
 const cdGold: React.CSSProperties = { background: 'linear-gradient(180deg,#C8A84B,#A87830)', color: '#1A0E06', fontFamily: "'Cinzel',serif", fontSize: 14, fontWeight: 700, padding: '13px 20px', border: 'none', borderRadius: 6, cursor: 'pointer', width: '100%', WebkitTapHighlightColor: 'transparent' };

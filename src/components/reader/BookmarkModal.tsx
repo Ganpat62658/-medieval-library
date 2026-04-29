@@ -1,5 +1,6 @@
 // src/components/reader/BookmarkModal.tsx
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { saveBookmark, getBookmarks, deleteBookmark, BookmarkData } from '@/lib/bookmarks';
 import { Book } from '@/lib/types';
 
@@ -70,7 +71,7 @@ export default function BookmarkModal({ book, currentPage, userId, libraryId, on
     onClose();
   };
 
-  return (
+  return createPortal(
     <div style={overlay} onClick={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()}>
       <div style={modal}>
         {/* Header */}
@@ -172,7 +173,7 @@ export default function BookmarkModal({ book, currentPage, userId, libraryId, on
         )}
       </div>
     </div>
-  );
+  , document.body);
 }
 
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(10,5,2,0.9)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, touchAction: 'none' };
