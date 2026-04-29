@@ -1,6 +1,3 @@
-// src/components/reader/OpenBookPrompt.tsx
-// Shown before opening a book — lets user choose to resume a bookmark or start fresh
-
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getBookmarks, BookmarkData } from '@/lib/bookmarks';
@@ -16,8 +13,10 @@ interface OpenBookPromptProps {
 export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCancel }: OpenBookPromptProps) {
   const [bookmarks, setBookmarks] = useState<BookmarkData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false); // Track mounting for Next.js SSR
 
   useEffect(() => {
+    setMounted(true);
     getBookmarks(userId, bookId)
       .then(bms => {
         setBookmarks(bms);
@@ -25,18 +24,22 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
         if (bms.length === 0) onOpen(1);
       })
       .catch(() => { setLoading(false); onOpen(1); });
-  }, [bookId, userId]);
+  }, [bookId, userId, onOpen]);
 
-  if (loading) return (
-    <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-      <div style={{ color: '#C8A84B', fontFamily: "'Cinzel',serif", fontSize: 14 }}>🕯️ Opening...</div>
-    </div>
-  , document.body);
+  // Don't render anything if we're still on the server
+  if (!mounted) return null;
 
-  // No bookmarks → already called onOpen(1) above
+  if (loading) {
+    return createPortal(
+      <div data-modal="true" style={overlay} onTouchStart={e => e.stopPropagation()} onTouchEnd={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+        <div style={{ color: '#C8A84B', fontFamily: "'Cinzel',serif", fontSize: 14 }}>🕯️ Opening...</div>
+      </div>,
+      document.body
+    );
+  }
+
   if (bookmarks.length === 0) return null;
 
-  // Most recent bookmark = highest page number
   const lastBookmark = [...bookmarks].sort((a, b) => b.pageNumber - a.pageNumber)[0];
 
   return createPortal(
@@ -75,17 +78,18 @@ export default function OpenBookPrompt({ bookId, bookTitle, userId, onOpen, onCa
           </div>
         )}
 
-        {/* Start from beginning */}
         <button style={startFreshBtn} onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); onOpen(1); }} onClick={e => { e.stopPropagation(); onOpen(1); }}>
           Start from Beginning
         </button>
 
         <button style={cancelBtn} onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); onCancel(); }} onClick={e => { e.stopPropagation(); onCancel(); }}>Cancel</button>
       </div>
-    </div>
-  , document.body);
+    </div>,
+    document.body
+  );
 }
 
+// ... styles remain the same
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 99998, background: 'rgba(10,5,2,0.92)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, touchAction: 'none' };
 const modal: React.CSSProperties = { background: 'linear-gradient(160deg,#2C1A0E,#1A0E06)', border: '1px solid rgba(200,168,75,0.35)', borderRadius: 8, padding: '28px 24px', maxWidth: 380, width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: 10 };
 const titleS: React.CSSProperties = { fontFamily: "'Cinzel',serif", fontSize: 18, color: '#C8A84B', margin: 0, textAlign: 'center' };
