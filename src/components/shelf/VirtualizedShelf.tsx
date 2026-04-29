@@ -33,7 +33,7 @@ interface ShelfRowProps {
   onScrollRef?: (el: HTMLDivElement | null) => void;
 }
 
-const ShelfRowComponent: React.FC<ShelfRowProps> = React.memo(function ShelfRowComponent({ row, books, userRole, highlightedBookId, onBookClick, onSlotClick, onEditRow, onScrollRef }) => {
+const ShelfRowComponent: React.FC<ShelfRowProps> = React.memo(({ row, books, userRole, highlightedBookId, onBookClick, onSlotClick, onEditRow, onScrollRef }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Forward ref to parent for programmatic horizontal scrolling
   const setScrollRef = React.useCallback((el: HTMLDivElement | null) => {
