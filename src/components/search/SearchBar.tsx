@@ -79,7 +79,7 @@ export default function SearchBar({ libraryId, rows, onResultSelect, onAdvancedT
   return (
     <>
       {/* Search container */}
-      <div ref={containerRef} style={{ position: 'relative', width: '100%', maxWidth: 560 }}>
+      <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {/* Input wrapper */}
           <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
