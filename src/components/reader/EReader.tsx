@@ -221,7 +221,7 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
       // Get total pages after spine is loaded
       epubBook.ready.then(() => {
         epubBook.locations.generate(1024).then(() => {
-          setTotalPages(epubBook.locations.total);
+          setTotalPages((epubBook.locations as any).length() ?? 0);
         });
       });
 
