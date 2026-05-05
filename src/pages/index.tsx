@@ -166,18 +166,17 @@ service cloud.firestore {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#1A0E06' }}>
-      {/* Top bar — stacks on mobile */}
+      {/* Top bar — single row on desktop, stacked on mobile */}
       <header style={{ background: '#2C1A0E', borderBottom: '1px solid rgba(200,168,75,0.2)', flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
-        {/* Row 1: title + hamburger */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px 6px', gap: 10 }}>
-          <h1 style={{ fontFamily: "'Cinzel',serif", fontSize: 18, color: '#C8A84B', margin: 0, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 10, flexWrap: 'wrap' }}>
+          <h1 style={{ fontFamily: "'Cinzel',serif", fontSize: 18, color: '#C8A84B', margin: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
             📚 The Library
           </h1>
+          {/* Search bar — grows to fill available space, wraps below title on narrow screens */}
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <SearchBar libraryId={libraryId} rows={rows} onResultSelect={(m, a) => handleSearchResult(m, a)} onAdvancedToggle={() => setShowAdvancedSearch(v => !v)} directOpen={directOpen} />
+          </div>
           <button onClick={() => setMenuOpen(true)} style={{ background: 'none', border: 'none', color: '#C8A84B', fontSize: 24, cursor: 'pointer', flexShrink: 0, padding: '0 4px' }}>☰</button>
-        </div>
-        {/* Row 2: search bar — full width */}
-        <div style={{ padding: '0 14px 10px' }}>
-          <SearchBar libraryId={libraryId} rows={rows} onResultSelect={(m, a) => handleSearchResult(m, a)} onAdvancedToggle={() => setShowAdvancedSearch(v => !v)} directOpen={directOpen} />
         </div>
       </header>
 
