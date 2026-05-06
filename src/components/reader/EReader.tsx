@@ -65,12 +65,12 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
     return res.arrayBuffer();
   }, [book.id, (book as any).fileUrl]);
 
-  // ── Step 1: detect format and mount correct container ─────────────────────
+  // ── Step 1: detect format — epub container is always mounted so no delay needed
   useEffect(() => {
     setReaderMode(fmt as ReaderMode);
     if (fmt === 'epub') {
-      // Give React one frame to mount the epubContainer div before loading
-      requestAnimationFrame(() => setEpubReady(true));
+      // Small delay to ensure ref is attached after render
+      setTimeout(() => setEpubReady(true), 50);
     }
   }, [fmt]);
 
@@ -192,17 +192,11 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
       const epubBook = Epub(blobUrl);
       epubBookRef.current = epubBook;
 
-      // Set status to ready first so the epub container div renders in DOM
-      if (!cancelled) setStatus('ready');
-      
-      // Wait for container to be mounted (React needs a render cycle)
-      let container = epubContainerRef.current;
-      if (!container) {
-        await new Promise(resolve => setTimeout(resolve, 150));
-        container = epubContainerRef.current;
-      }
-      if (!container) throw new Error('EPUB container failed to mount. Please try again.');
       if (cancelled) return;
+
+      // Container is always in DOM — ref should be available
+      const container = epubContainerRef.current;
+      if (!container) throw new Error('EPUB container not available. Please close and reopen.');
 
       const isMobile = isMobileRef.current;
       const rendition = epubBook.renderTo(container, {
@@ -239,7 +233,7 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
 
       await rendition.display();
       if (cancelled) return;
-      // status already set to 'ready' above — no need to set again
+      setStatus('ready');
     }
 
     // ── TXT ──────────────────────────────────────────────────────────────────
@@ -384,14 +378,12 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
           </>
         )}
 
-        {/* EPUB — always mounted so ref is available */}
-        {fmt === 'epub' && (
-          <>
-            {status === 'ready' && <button onClick={prevPage} style={{ ...arrowBtnS, left: 8 }}>‹</button>}
-            <div ref={epubContainerRef} style={{ width: '100%', height: '100%', background: '#FDFAF0', visibility: status === 'ready' ? 'visible' : 'hidden' }} />
-            {status === 'ready' && <button onClick={nextPage} style={{ ...arrowBtnS, right: 8 }}>›</button>}
-          </>
-        )}
+        {/* EPUB — always in DOM so ref is available immediately, hidden when not epub */}
+        <div style={{ display: fmt === 'epub' ? 'contents' : 'none' }}>
+          {status === 'ready' && fmt === 'epub' && <button onClick={prevPage} style={{ ...arrowBtnS, left: 8 }}>‹</button>}
+          <div ref={epubContainerRef} style={{ width: '100%', height: '100%', background: '#FDFAF0', visibility: fmt === 'epub' && status === 'ready' ? 'visible' : 'hidden', position: fmt === 'epub' ? 'relative' : 'absolute', pointerEvents: fmt === 'epub' ? 'auto' : 'none' }} />
+          {status === 'ready' && fmt === 'epub' && <button onClick={nextPage} style={{ ...arrowBtnS, right: 8 }}>›</button>}
+        </div>
 
         {/* TXT */}
         {fmt === 'txt' && status === 'ready' && (
