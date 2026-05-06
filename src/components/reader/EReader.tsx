@@ -181,15 +181,24 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
       }
 
       setLoadMsg('Loading chapters…');
-      const Epub = (await import('epubjs')).default;
+
+      // epub.js has inconsistent exports across bundlers — try all forms
+      const epubModule = await import('epubjs');
+      const Epub: any = epubModule.default ?? (epubModule as any).ePub ?? epubModule;
       if (cancelled) return;
 
-      // Create blob URL from buffer — more reliable than passing buffer directly
+      // Create blob URL — most reliable way to pass file to epub.js
       const blob = new Blob([buffer], { type: 'application/epub+zip' });
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
 
-      const epubBook = Epub(blobUrl);
+      // epub.js can be called as Epub() or new Epub()
+      let epubBook: any;
+      try {
+        epubBook = typeof Epub === 'function' ? Epub(blobUrl) : new (Epub as any)(blobUrl);
+      } catch {
+        epubBook = new (Epub as any)(blobUrl);
+      }
       epubBookRef.current = epubBook;
 
       if (cancelled) return;
@@ -231,7 +240,12 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
         if (total) setTotalPages(t => Math.max(t, total));
       });
 
-      await rendition.display();
+      try {
+        await rendition.display();
+      } catch (displayErr: any) {
+        console.error('EPUB rendition.display() failed:', displayErr);
+        throw new Error('EPUB failed to render: ' + (displayErr?.message ?? 'unknown error'));
+      }
       if (cancelled) return;
       setStatus('ready');
     }
