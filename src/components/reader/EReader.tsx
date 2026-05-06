@@ -170,97 +170,102 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
       const buffer = await fetchBuffer();
       if (cancelled) return;
 
-      // Validate it's actually an EPUB (ZIP magic bytes: PK\x03\x04)
+      // Validate EPUB (ZIP magic bytes PK = 0x50 0x4B)
       const magic = new Uint8Array(buffer.slice(0, 4));
-      if (magic[0] !== 0x50 || magic[1] !== 0x4B) {
-        throw new Error(
-          'This file does not appear to be a valid EPUB.\n\n' +
-          'If it came from Google Drive, Drive sometimes converts EPUBs to ZIP files when sharing. ' +
-          'Instead, download the EPUB to your device first, then upload it using "From My Device".'
-        );
+      if (magic[0] === 0x25 && magic[1] === 0x50) {
+        throw new Error('This is a PDF file. Please re-add it with format set to PDF.');
       }
 
       setLoadMsg('Loading chapters…');
 
-      // epub.js has inconsistent exports across bundlers — try all forms
-      const epubModule = await import('epubjs');
-      const Epub: any = epubModule.default ?? (epubModule as any).ePub ?? epubModule;
+      // Use JSZip to extract EPUB contents and render manually
+      // This avoids epub.js domain-fetch bug entirely
+      const JSZip = (await import('jszip')).default;
       if (cancelled) return;
 
-      // Create blob URL — epub.js must receive a URL, not an ArrayBuffer
-      // Use requestCredentials: 'omit' to prevent cross-origin issues
-      const blob = new Blob([buffer], { type: 'application/epub+zip' });
-      const blobUrl = URL.createObjectURL(blob);
-      blobUrls.push(blobUrl);
+      const zip = await JSZip.loadAsync(buffer);
+      if (cancelled) return;
 
-      let epubBook: any;
-      if (typeof Epub === 'function') {
-        epubBook = Epub(blobUrl, {
-          requestCredentials: 'omit',
-          requestHeaders: [],
-        });
-      } else {
-        epubBook = new (Epub as any)(blobUrl, {
-          requestCredentials: 'omit',
-          requestHeaders: [],
-        });
-      }
-      epubBookRef.current = epubBook;
+      // Find the content OPF file via container.xml
+      const containerXml = await zip.file('META-INF/container.xml')?.async('text');
+      if (!containerXml) throw new Error('Invalid EPUB: missing META-INF/container.xml');
 
-      // Wait for epub to parse — this is where it reads the blob internally
-      try {
-        await epubBook.opened;
-      } catch (openErr: any) {
-        console.error('epub.opened failed:', openErr);
-        throw new Error('Failed to open EPUB: ' + (openErr?.message ?? 'parse error'));
+      const opfMatch = containerXml.match(/full-path="([^"]+)"/);
+      if (!opfMatch) throw new Error('Invalid EPUB: cannot find OPF path');
+      const opfPath = opfMatch[1];
+      const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
+
+      const opfXml = await zip.file(opfPath)?.async('text');
+      if (!opfXml) throw new Error('Invalid EPUB: missing OPF file');
+
+      // Parse spine items (reading order)
+      const parser = new DOMParser();
+      const opfDoc = parser.parseFromString(opfXml, 'application/xml');
+
+      // Build manifest map id -> href
+      const manifest: Record<string, string> = {};
+      opfDoc.querySelectorAll('manifest item').forEach(item => {
+        const id = item.getAttribute('id') ?? '';
+        const href = item.getAttribute('href') ?? '';
+        manifest[id] = href;
+      });
+
+      // Get spine order
+      const spineItems: string[] = [];
+      opfDoc.querySelectorAll('spine itemref').forEach(ref => {
+        const idref = ref.getAttribute('idref') ?? '';
+        if (manifest[idref]) spineItems.push(manifest[idref]);
+      });
+
+      if (spineItems.length === 0) throw new Error('Invalid EPUB: no spine items found');
+
+      // Extract all chapter HTML files as blob URLs
+      const chapterUrls: string[] = [];
+      for (const href of spineItems) {
+        const fullPath = opfDir + href;
+        const file = zip.file(fullPath) ?? zip.file(href);
+        if (!file) continue;
+
+        let html = await file.async('text');
+
+        // Inline all images as data URLs
+        const imgMatches = [...html.matchAll(/src=["']([^"']+)["']/g)];
+        for (const match of imgMatches) {
+          const imgHref = match[1];
+          if (imgHref.startsWith('data:') || imgHref.startsWith('http')) continue;
+          const imgPath = opfDir + imgHref;
+          const imgFile = zip.file(imgPath) ?? zip.file(imgHref);
+          if (imgFile) {
+            const imgData = await imgFile.async('base64');
+            const ext = imgHref.split('.').pop()?.toLowerCase() ?? 'png';
+            const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+            html = html.replace(match[0], `src="data:${mime};base64,${imgData}"`);
+          }
+        }
+
+        // Inject medieval styles
+        const styledHtml = html.replace('</head>', `
+          <style>
+            body { font-family: 'Crimson Text', Georgia, serif !important; font-size: 1.1em !important; line-height: 1.85 !important; color: #1A0E05 !important; background: #FDFAF0 !important; padding: 2em 2.5em !important; margin: 0 !important; max-width: 680px !important; }
+            p { margin-bottom: 0.9em !important; }
+            h1,h2,h3,h4 { font-family: 'Cinzel', serif !important; color: #4A2C17 !important; }
+            a { color: #8B4A2A !important; }
+            img { max-width: 100% !important; height: auto !important; }
+          </style>
+        </head>`);
+
+        const blob = new Blob([styledHtml], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        blobUrls.push(url);
+        chapterUrls.push(url);
       }
 
       if (cancelled) return;
+      if (chapterUrls.length === 0) throw new Error('EPUB has no readable chapters.');
 
-      // Container is always in DOM — ref should be available
-      const container = epubContainerRef.current;
-      if (!container) throw new Error('EPUB container not available. Please close and reopen.');
-
-      const isMobile = isMobileRef.current;
-      const rendition = epubBook.renderTo(container, {
-        width: '100%',
-        height: '100%',
-        spread: isMobile ? 'none' : 'always',
-        flow: 'paginated',
-      });
-      epubRenditionRef.current = rendition;
-
-      // Apply parchment theme
-      rendition.themes.register('medieval', {
-        body: {
-          'font-family': "'Crimson Text', Georgia, serif !important",
-          'font-size': '1.05em !important',
-          'line-height': '1.85 !important',
-          'color': '#1A0E05 !important',
-          'background': '#FDFAF0 !important',
-          'padding': '2em !important',
-          'margin': '0 !important',
-        },
-        'p': { 'margin-bottom': '0.9em !important' },
-        'h1,h2,h3,h4': { 'font-family': "'Cinzel', serif !important", 'color': '#4A2C17 !important' },
-        'a': { 'color': '#8B4A2A !important' },
-      });
-      rendition.themes.select('medieval');
-
-      rendition.on('relocated', (loc: any) => {
-        const p = loc?.start?.displayed?.page;
-        const total = loc?.start?.displayed?.total;
-        if (p) setCurrentPage(p);
-        if (total) setTotalPages(t => Math.max(t, total));
-      });
-
-      try {
-        await rendition.display();
-      } catch (displayErr: any) {
-        console.error('EPUB rendition.display() failed:', displayErr);
-        throw new Error('EPUB failed to render: ' + (displayErr?.message ?? 'unknown error'));
-      }
-      if (cancelled) return;
+      setTxtPages(chapterUrls); // reuse txtPages to store chapter URLs
+      setTotalPages(chapterUrls.length);
+      setCurrentPage(Math.min(initialPage, chapterUrls.length));
       setStatus('ready');
     }
 
@@ -321,22 +326,19 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   const prevPage = useCallback(() => {
-    if (fmt === 'pdf')  pageFlipRef.current?.flipPrev();
-    if (fmt === 'epub') epubRenditionRef.current?.prev();
-    if (fmt === 'txt')  setCurrentPage(p => Math.max(1, p - 1));
+    if (fmt === 'pdf') pageFlipRef.current?.flipPrev();
+    else setCurrentPage(p => Math.max(1, p - 1));
   }, [fmt]);
 
   const nextPage = useCallback(() => {
-    if (fmt === 'pdf')  pageFlipRef.current?.flipNext();
-    if (fmt === 'epub') epubRenditionRef.current?.next();
-    if (fmt === 'txt')  setCurrentPage(p => Math.min(totalPages, p + 1));
+    if (fmt === 'pdf') pageFlipRef.current?.flipNext();
+    else setCurrentPage(p => Math.min(totalPages, p + 1));
   }, [fmt, totalPages]);
 
   const jumpToPage = useCallback((p: number) => {
     const n = Math.max(1, Math.min(p, totalPages || p));
-    if (fmt === 'pdf')  { pageFlipRef.current?.turnToPage(n - 1); setCurrentPage(n); }
-    if (fmt === 'epub') epubRenditionRef.current?.display(`epubcfi(/6/${n * 2}!/4)`);
-    if (fmt === 'txt')  setCurrentPage(n);
+    if (fmt === 'pdf') { pageFlipRef.current?.turnToPage(n - 1); setCurrentPage(n); }
+    else setCurrentPage(n);
   }, [fmt, totalPages]);
 
   useEffect(() => {
@@ -406,12 +408,29 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
           </>
         )}
 
-        {/* EPUB — always in DOM so ref is available immediately, hidden when not epub */}
-        <div style={{ display: fmt === 'epub' ? 'contents' : 'none' }}>
-          {status === 'ready' && fmt === 'epub' && <button onClick={prevPage} style={{ ...arrowBtnS, left: 8 }}>‹</button>}
-          <div ref={epubContainerRef} style={{ width: '100%', height: '100%', background: '#FDFAF0', visibility: fmt === 'epub' && status === 'ready' ? 'visible' : 'hidden', position: fmt === 'epub' ? 'relative' : 'absolute', pointerEvents: fmt === 'epub' ? 'auto' : 'none' }} />
-          {status === 'ready' && fmt === 'epub' && <button onClick={nextPage} style={{ ...arrowBtnS, right: 8 }}>›</button>}
-        </div>
+        {/* EPUB — rendered as iframe with extracted chapter HTML */}
+        {fmt === 'epub' && status === 'ready' && (
+          <>
+            <button onClick={prevPage} style={{ ...arrowBtnS, left: 8 }}>‹</button>
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 60px', boxSizing: 'border-box' }}>
+              <iframe
+                key={currentPage}
+                src={txtPages[currentPage - 1]}
+                style={{
+                  width: '100%', height: '100%', border: 'none',
+                  background: '#FDFAF0',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+                  maxWidth: 720,
+                }}
+                sandbox="allow-same-origin"
+                title={`Chapter ${currentPage}`}
+              />
+            </div>
+            <button onClick={nextPage} style={{ ...arrowBtnS, right: 8 }}>›</button>
+          </>
+        )}
+        {/* Hidden epub container ref — kept for compatibility */}
+        <div ref={epubContainerRef} style={{ display: 'none' }} />
 
         {/* TXT */}
         {fmt === 'txt' && status === 'ready' && (
