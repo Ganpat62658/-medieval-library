@@ -187,17 +187,19 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
       const Epub: any = epubModule.default ?? (epubModule as any).ePub ?? epubModule;
       if (cancelled) return;
 
-      // Create blob URL — most reliable way to pass file to epub.js
-      const blob = new Blob([buffer], { type: 'application/epub+zip' });
-      const blobUrl = URL.createObjectURL(blob);
-      blobUrls.push(blobUrl);
-
-      // epub.js can be called as Epub() or new Epub()
+      // Pass ArrayBuffer directly — this prevents epub.js from trying to
+      // fetch container.xml relative to the current domain (which causes 404)
       let epubBook: any;
       try {
-        epubBook = typeof Epub === 'function' ? Epub(blobUrl) : new (Epub as any)(blobUrl);
+        epubBook = typeof Epub === 'function'
+          ? Epub(buffer, { openAs: 'epub' })
+          : new (Epub as any)(buffer, { openAs: 'epub' });
       } catch {
-        epubBook = new (Epub as any)(blobUrl);
+        // Fallback: try blob URL
+        const blob = new Blob([buffer], { type: 'application/epub+zip' });
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrls.push(blobUrl);
+        epubBook = typeof Epub === 'function' ? Epub(blobUrl) : new (Epub as any)(blobUrl);
       }
       epubBookRef.current = epubBook;
 
