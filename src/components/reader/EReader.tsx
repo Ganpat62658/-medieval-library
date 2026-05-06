@@ -229,7 +229,7 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
         let html = await file.async('text');
 
         // Inline all images as data URLs
-        const imgMatches = [...html.matchAll(/src=["']([^"']+)["']/g)];
+        const imgMatches = Array.from(html.matchAll(/src=["']([^"']+)["']/g));
         for (const match of imgMatches) {
           const imgHref = match[1];
           if (imgHref.startsWith('data:') || imgHref.startsWith('http')) continue;
