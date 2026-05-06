@@ -187,21 +187,33 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
       const Epub: any = epubModule.default ?? (epubModule as any).ePub ?? epubModule;
       if (cancelled) return;
 
-      // Pass ArrayBuffer directly — this prevents epub.js from trying to
-      // fetch container.xml relative to the current domain (which causes 404)
+      // Create blob URL — epub.js must receive a URL, not an ArrayBuffer
+      // Use requestCredentials: 'omit' to prevent cross-origin issues
+      const blob = new Blob([buffer], { type: 'application/epub+zip' });
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrls.push(blobUrl);
+
       let epubBook: any;
-      try {
-        epubBook = typeof Epub === 'function'
-          ? Epub(buffer, { openAs: 'epub' })
-          : new (Epub as any)(buffer, { openAs: 'epub' });
-      } catch {
-        // Fallback: try blob URL
-        const blob = new Blob([buffer], { type: 'application/epub+zip' });
-        const blobUrl = URL.createObjectURL(blob);
-        blobUrls.push(blobUrl);
-        epubBook = typeof Epub === 'function' ? Epub(blobUrl) : new (Epub as any)(blobUrl);
+      if (typeof Epub === 'function') {
+        epubBook = Epub(blobUrl, {
+          requestCredentials: 'omit',
+          requestHeaders: [],
+        });
+      } else {
+        epubBook = new (Epub as any)(blobUrl, {
+          requestCredentials: 'omit',
+          requestHeaders: [],
+        });
       }
       epubBookRef.current = epubBook;
+
+      // Wait for epub to parse — this is where it reads the blob internally
+      try {
+        await epubBook.opened;
+      } catch (openErr: any) {
+        console.error('epub.opened failed:', openErr);
+        throw new Error('Failed to open EPUB: ' + (openErr?.message ?? 'parse error'));
+      }
 
       if (cancelled) return;
 
