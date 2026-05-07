@@ -1,10 +1,12 @@
 'use client';
+// src/components/reader/EReader.tsx — PDF only reader with page-flip animation
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Book } from '@/lib/types';
 import { getLocalBook } from '@/lib/localBooks';
 import { convertDriveLink, isDriveLink } from '@/lib/driveHelper';
 import BookmarkModal from './BookmarkModal';
-import { createPortal } from 'react-dom';
 
 interface EReaderProps {
   book: Book;
@@ -14,332 +16,156 @@ interface EReaderProps {
   onClose: () => void;
 }
 
-type ReaderMode = 'pdf' | 'epub' | 'txt';
-
 const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage = 1, onClose }) => {
-  const flipContainerRef  = useRef<HTMLDivElement>(null);
-  const epubContainerRef  = useRef<HTMLDivElement>(null);
-  const pageFlipRef       = useRef<any>(null);
-  const epubRenditionRef  = useRef<any>(null);
-  const epubBookRef       = useRef<any>(null);
+  const flipContainerRef = useRef<HTMLDivElement>(null);
+  const pageFlipRef      = useRef<any>(null);
   const [currentPage, setCurrentPage]   = useState(initialPage);
   const [totalPages, setTotalPages]     = useState(0);
   const [status, setStatus]             = useState<'loading' | 'rendering' | 'ready' | 'error'>('loading');
   const [loadMsg, setLoadMsg]           = useState('Opening the tome...');
   const [errorMsg, setErrorMsg]         = useState('');
   const [showBookmark, setShowBookmark] = useState(false);
-  const [txtPages, setTxtPages]         = useState<string[]>([]);
-  const [readerMode, setReaderMode]     = useState<ReaderMode>('pdf');
-  // Flag so EPUB container is mounted before we try to render into it
-  const [epubReady, setEpubReady]       = useState(false);
-  const isMobileRef = useRef(typeof window !== 'undefined' && window.innerWidth <= 768);
+  const isMobileRef = useRef(false);
 
-  const fmt = ((book as any).format as string) || 'pdf';
+  useEffect(() => { isMobileRef.current = window.innerWidth <= 768; }, []);
 
-  // ── Fetch file as ArrayBuffer ─────────────────────────────────────────────
-  const fetchBuffer = useCallback(async (): Promise<ArrayBuffer> => {
-    // 1. Try local IndexedDB
-    const local = await getLocalBook(book.id).catch(() => null);
-    if (local) return local.arrayBuffer();
-
-    const rawUrl = (book as any).fileUrl as string | null;
-    if (!rawUrl) throw new Error('No file attached. Re-add this book with a link.');
-
-    // 2. For Drive links — always use the proxy (Drive blocks direct fetches & converts EPUB to ZIP)
-    if (isDriveLink(rawUrl)) {
-      const c = convertDriveLink(rawUrl);
-      if (!c) throw new Error('Could not parse Google Drive link.');
-      const res = await fetch(`/api/fetch-pdf?url=${encodeURIComponent(c.downloadUrl)}`);
-      if (!res.ok) throw new Error(`Drive fetch failed (${res.status}). Make sure sharing is set to "Anyone with the link".`);
-      return res.arrayBuffer();
-    }
-
-    // 3. Direct URL — try as-is, fall back to proxy
-    try {
-      const res = await fetch(rawUrl);
-      if (res.ok) return res.arrayBuffer();
-    } catch { /* CORS — fall through */ }
-
-    const res = await fetch(`/api/fetch-pdf?url=${encodeURIComponent(rawUrl)}`);
-    if (!res.ok) throw new Error('Could not download file. Make sure the link is public.');
-    return res.arrayBuffer();
-  }, [book.id, (book as any).fileUrl]);
-
-  // ── Step 1: detect format — epub container is always mounted so no delay needed
   useEffect(() => {
-    setReaderMode(fmt as ReaderMode);
-    if (fmt === 'epub') {
-      // Small delay to ensure ref is attached after render
-      setTimeout(() => setEpubReady(true), 50);
-    }
-  }, [fmt]);
-
-  // ── Step 2: load content once container is ready ──────────────────────────
-  useEffect(() => {
-    if (fmt === 'epub' && !epubReady) return; // wait for container
     let cancelled = false;
-    const blobUrls: string[] = [];
 
     async function run() {
       try {
-        if (fmt === 'pdf')  await loadPdf(cancelled);
-        if (fmt === 'epub') await loadEpub(cancelled, blobUrls);
-        if (fmt === 'txt')  await loadTxt(cancelled);
+        setStatus('loading');
+        setLoadMsg('Opening the tome...');
+
+        // ── Get PDF bytes ─────────────────────────────────────────────────
+        let pdfData: ArrayBuffer | null = null;
+
+        const localFile = await getLocalBook(book.id).catch(() => null);
+        if (localFile) {
+          setLoadMsg('Reading from your device...');
+          pdfData = await localFile.arrayBuffer();
+        } else {
+          const rawUrl = (book as any).fileUrl as string | null;
+          if (!rawUrl) throw new Error('No file found. Re-add this book with a link.');
+
+          setLoadMsg('Fetching the manuscript...');
+          let fetchUrl = rawUrl;
+          if (isDriveLink(rawUrl)) {
+            const c = convertDriveLink(rawUrl);
+            if (!c) throw new Error('Could not parse Google Drive link.');
+            fetchUrl = c.downloadUrl;
+          }
+
+          try {
+            const res = await fetch(fetchUrl);
+            if (res.ok) pdfData = await res.arrayBuffer();
+          } catch { /* try proxy */ }
+
+          if (!pdfData) {
+            const res = await fetch(`/api/fetch-pdf?url=${encodeURIComponent(fetchUrl)}`);
+            if (!res.ok) throw new Error('Could not download the PDF. Make sure the link is set to "Anyone can view".');
+            pdfData = await res.arrayBuffer();
+          }
+        }
+
+        if (!pdfData) throw new Error('Failed to load PDF data.');
+        if (cancelled) return;
+
+        // ── Load PDF.js ───────────────────────────────────────────────────
+        setStatus('rendering');
+        setLoadMsg('Loading PDF engine...');
+        const pdfjsLib = await import('pdfjs-dist');
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
+        const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(pdfData), useSystemFonts: true }).promise;
+        if (cancelled) return;
+
+        const numPages = pdf.numPages;
+        setTotalPages(numPages);
+
+        // ── Render pages ──────────────────────────────────────────────────
+        const isMobile = isMobileRef.current;
+        const displayW = isMobile
+          ? window.innerWidth - 16
+          : Math.min(Math.floor((window.innerWidth - 120) / 2), 700);
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const pageEls: HTMLElement[] = [];
+
+        for (let i = 1; i <= numPages; i++) {
+          if (cancelled) return;
+          if (i === 1 || i % 20 === 0) setLoadMsg(`Illuminating pages... ${i}/${numPages}`);
+
+          const page = await pdf.getPage(i);
+          const vp0   = page.getViewport({ scale: 1 });
+          const scale = (displayW / vp0.width) * dpr;
+          const vp    = page.getViewport({ scale });
+
+          const canvas = document.createElement('canvas');
+          canvas.width  = Math.floor(vp.width);
+          canvas.height = Math.floor(vp.height);
+          canvas.style.width  = `${Math.floor(vp.width / dpr)}px`;
+          canvas.style.height = `${Math.floor(vp.height / dpr)}px`;
+
+          const ctx = canvas.getContext('2d')!;
+          ctx.fillStyle = '#FDFAF0';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+          const wrapper = document.createElement('div');
+          wrapper.style.cssText = 'background:#FDFAF0;display:flex;align-items:center;justify-content:center;overflow:hidden;width:100%;height:100%;';
+          wrapper.appendChild(canvas);
+          pageEls.push(wrapper);
+        }
+
+        if (cancelled || !flipContainerRef.current) return;
+        setLoadMsg('Binding the book...');
+
+        // ── PageFlip ──────────────────────────────────────────────────────
+        flipContainerRef.current.innerHTML = '';
+        const { PageFlip } = await import('page-flip');
+        if (cancelled) return;
+
+        const firstCanvas = pageEls[0]?.firstChild as HTMLCanvasElement | null;
+        const pageW = firstCanvas ? parseInt(firstCanvas.style.width)  || Math.floor(firstCanvas.width / dpr)  : displayW;
+        const pageH = firstCanvas ? parseInt(firstCanvas.style.height) || Math.floor(firstCanvas.height / dpr) : 800;
+
+        const flipBook = new PageFlip(flipContainerRef.current, {
+          width: pageW, height: pageH,
+          size: 'stretch',
+          minWidth: isMobile ? 280 : 320,
+          maxWidth: isMobile ? window.innerWidth : 650,
+          minHeight: 350, maxHeight: 950,
+          drawShadow: true, flippingTime: 650,
+          usePortrait: isMobile, autoSize: true,
+          showCover: false, mobileScrollSupport: false,
+          swipeDistance: 20, clickEventForward: true, startZIndex: 0,
+        });
+
+        flipBook.loadFromHTML(pageEls);
+        pageFlipRef.current = flipBook;
+        if (initialPage > 1) setTimeout(() => flipBook.turnToPage(initialPage - 1), 100);
+        flipBook.on('flip', (e: any) => setCurrentPage(e.data + 1));
+        if (!cancelled) setStatus('ready');
+
       } catch (err: any) {
         if (cancelled) return;
-        console.error('EReader error:', err);
-        setErrorMsg(err.message ?? 'Could not open this book.');
+        setErrorMsg(err.message ?? 'Unknown error opening book.');
         setStatus('error');
       }
     }
 
-    // ── PDF ──────────────────────────────────────────────────────────────────
-    async function loadPdf(cancelled: boolean) {
-      setStatus('loading');
-      setLoadMsg('Loading PDF engine...');
-      const buffer = await fetchBuffer();
-      if (cancelled) return;
-
-      const pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-
-      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), useSystemFonts: true }).promise;
-      if (cancelled) return;
-
-      const numPages = pdf.numPages;
-      setTotalPages(numPages);
-      setStatus('rendering');
-
-      const isMobile = isMobileRef.current;
-      const displayW = isMobile ? window.innerWidth - 16 : Math.min(Math.floor((window.innerWidth - 120) / 2), 700);
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const pageEls: HTMLElement[] = [];
-
-      for (let i = 1; i <= numPages; i++) {
-        if (cancelled) return;
-        const page = await pdf.getPage(i);
-        const vp0 = page.getViewport({ scale: 1 });
-        const scale = (displayW / vp0.width) * dpr;
-        const vp = page.getViewport({ scale });
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.floor(vp.width);
-        canvas.height = Math.floor(vp.height);
-        canvas.style.width  = `${Math.floor(vp.width / dpr)}px`;
-        canvas.style.height = `${Math.floor(vp.height / dpr)}px`;
-        const ctx = canvas.getContext('2d')!;
-        ctx.fillStyle = '#FDFAF0';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvasContext: ctx, viewport: vp }).promise;
-        const w = document.createElement('div');
-        w.style.cssText = 'background:#FDFAF0;display:flex;align-items:center;justify-content:center;overflow:hidden;width:100%;height:100%;';
-        w.appendChild(canvas);
-        pageEls.push(w);
-        if (i % 20 === 0 || i === numPages) setLoadMsg(`Rendering pages… ${i}/${numPages}`);
-      }
-
-      if (cancelled || !flipContainerRef.current) return;
-      flipContainerRef.current.innerHTML = '';
-      const { PageFlip } = await import('page-flip');
-      if (cancelled) return;
-
-      const fc = pageEls[0]?.firstChild as HTMLCanvasElement | null;
-      const pageW = fc ? parseInt(fc.style.width)  || Math.floor(fc.width / dpr)  : displayW;
-      const pageH = fc ? parseInt(fc.style.height) || Math.floor(fc.height / dpr) : 800;
-
-      const flip = new PageFlip(flipContainerRef.current, {
-        width: pageW, height: pageH, size: 'stretch',
-        minWidth: isMobile ? 280 : 320, maxWidth: isMobile ? window.innerWidth : 650,
-        minHeight: 350, maxHeight: 950,
-        drawShadow: true, flippingTime: 650, usePortrait: isMobile,
-        autoSize: true, showCover: false, mobileScrollSupport: false,
-        swipeDistance: 20, clickEventForward: true, startZIndex: 0,
-      });
-      flip.loadFromHTML(pageEls);
-      pageFlipRef.current = flip;
-      if (initialPage > 1) setTimeout(() => flip.turnToPage(initialPage - 1), 100);
-      flip.on('flip', (e: any) => setCurrentPage(e.data + 1));
-      if (!cancelled) setStatus('ready');
-    }
-
-    // ── EPUB ─────────────────────────────────────────────────────────────────
-    async function loadEpub(cancelled: boolean, blobUrls: string[]) {
-      setStatus('loading');
-      setLoadMsg('Opening the manuscript…');
-
-      const buffer = await fetchBuffer();
-      if (cancelled) return;
-
-      // Validate EPUB (ZIP magic bytes PK = 0x50 0x4B)
-      const magic = new Uint8Array(buffer.slice(0, 4));
-      if (magic[0] === 0x25 && magic[1] === 0x50) {
-        throw new Error('This is a PDF file. Please re-add it with format set to PDF.');
-      }
-
-      setLoadMsg('Loading chapters…');
-
-      // Use JSZip to extract EPUB contents and render manually
-      // This avoids epub.js domain-fetch bug entirely
-      const JSZip = (await import('jszip')).default;
-      if (cancelled) return;
-
-      const zip = await JSZip.loadAsync(buffer);
-      if (cancelled) return;
-
-      // Find the content OPF file via container.xml
-      const containerXml = await zip.file('META-INF/container.xml')?.async('text');
-      if (!containerXml) throw new Error('Invalid EPUB: missing META-INF/container.xml');
-
-      const opfMatch = containerXml.match(/full-path="([^"]+)"/);
-      if (!opfMatch) throw new Error('Invalid EPUB: cannot find OPF path');
-      const opfPath = opfMatch[1];
-      const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
-
-      const opfXml = await zip.file(opfPath)?.async('text');
-      if (!opfXml) throw new Error('Invalid EPUB: missing OPF file');
-
-      // Parse spine items (reading order)
-      const parser = new DOMParser();
-      const opfDoc = parser.parseFromString(opfXml, 'application/xml');
-
-      // Build manifest map id -> href
-      const manifest: Record<string, string> = {};
-      opfDoc.querySelectorAll('manifest item').forEach(item => {
-        const id = item.getAttribute('id') ?? '';
-        const href = item.getAttribute('href') ?? '';
-        manifest[id] = href;
-      });
-
-      // Get spine order
-      const spineItems: string[] = [];
-      opfDoc.querySelectorAll('spine itemref').forEach(ref => {
-        const idref = ref.getAttribute('idref') ?? '';
-        if (manifest[idref]) spineItems.push(manifest[idref]);
-      });
-
-      if (spineItems.length === 0) throw new Error('Invalid EPUB: no spine items found');
-
-      // Extract all chapter HTML files as blob URLs
-      const chapterUrls: string[] = [];
-      for (const href of spineItems) {
-        const fullPath = opfDir + href;
-        const file = zip.file(fullPath) ?? zip.file(href);
-        if (!file) continue;
-
-        let html = await file.async('text');
-
-        // Inline all images as data URLs
-        const imgMatches = Array.from(html.matchAll(/src=["']([^"']+)["']/g));
-        for (const match of imgMatches) {
-          const imgHref = match[1];
-          if (imgHref.startsWith('data:') || imgHref.startsWith('http')) continue;
-          const imgPath = opfDir + imgHref;
-          const imgFile = zip.file(imgPath) ?? zip.file(imgHref);
-          if (imgFile) {
-            const imgData = await imgFile.async('base64');
-            const ext = imgHref.split('.').pop()?.toLowerCase() ?? 'png';
-            const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
-            html = html.replace(match[0], `src="data:${mime};base64,${imgData}"`);
-          }
-        }
-
-        // Inject medieval styles
-        const styledHtml = html.replace('</head>', `
-          <style>
-            body { font-family: 'Crimson Text', Georgia, serif !important; font-size: 1.1em !important; line-height: 1.85 !important; color: #1A0E05 !important; background: #FDFAF0 !important; padding: 2em 2.5em !important; margin: 0 !important; max-width: 680px !important; }
-            p { margin-bottom: 0.9em !important; }
-            h1,h2,h3,h4 { font-family: 'Cinzel', serif !important; color: #4A2C17 !important; }
-            a { color: #8B4A2A !important; }
-            img { max-width: 100% !important; height: auto !important; }
-          </style>
-        </head>`);
-
-        const blob = new Blob([styledHtml], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        blobUrls.push(url);
-        chapterUrls.push(url);
-      }
-
-      if (cancelled) return;
-      if (chapterUrls.length === 0) throw new Error('EPUB has no readable chapters.');
-
-      setTxtPages(chapterUrls); // reuse txtPages to store chapter URLs
-      setTotalPages(chapterUrls.length);
-      setCurrentPage(Math.min(initialPage, chapterUrls.length));
-      setStatus('ready');
-    }
-
-    // ── TXT ──────────────────────────────────────────────────────────────────
-    async function loadTxt(cancelled: boolean) {
-      setStatus('loading');
-      setLoadMsg('Reading the scroll…');
-      const buffer = await fetchBuffer();
-      if (cancelled) return;
-
-      // Detect encoding and decode properly
-      let text: string;
-      try {
-        // Try UTF-8 first
-        text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
-      } catch {
-        try {
-          // Fall back to Windows-1252 (common for older text files)
-          text = new TextDecoder('windows-1252').decode(buffer);
-        } catch {
-          text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
-        }
-      }
-
-      // Remove BOM if present
-      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-
-      const CHARS = 2800;
-      const pages: string[] = [];
-      // Split on paragraph boundaries when possible
-      const paragraphs = text.split(/\n\n+/);
-      let current = '';
-      for (const para of paragraphs) {
-        if (current.length + para.length > CHARS && current.length > 0) {
-          pages.push(current.trim());
-          current = para + '\n\n';
-        } else {
-          current += para + '\n\n';
-        }
-      }
-      if (current.trim()) pages.push(current.trim());
-
-      if (cancelled) return;
-      setTxtPages(pages);
-      setTotalPages(pages.length);
-      setCurrentPage(Math.min(initialPage, pages.length));
-      setStatus('ready');
-    }
-
     run();
-    return () => {
-      cancelled = true;
-      blobUrls.forEach(u => URL.revokeObjectURL(u));
-      epubRenditionRef.current?.destroy();
-      epubBookRef.current?.destroy();
-    };
-  }, [fmt, epubReady, fetchBuffer, initialPage]);
+    return () => { cancelled = true; };
+  }, [book.id, initialPage]);
 
-  // ── Navigation ─────────────────────────────────────────────────────────────
-  const prevPage = useCallback(() => {
-    if (fmt === 'pdf') pageFlipRef.current?.flipPrev();
-    else setCurrentPage(p => Math.max(1, p - 1));
-  }, [fmt]);
-
-  const nextPage = useCallback(() => {
-    if (fmt === 'pdf') pageFlipRef.current?.flipNext();
-    else setCurrentPage(p => Math.min(totalPages, p + 1));
-  }, [fmt, totalPages]);
-
+  const prevPage  = useCallback(() => pageFlipRef.current?.flipPrev(), []);
+  const nextPage  = useCallback(() => pageFlipRef.current?.flipNext(), []);
   const jumpToPage = useCallback((p: number) => {
     const n = Math.max(1, Math.min(p, totalPages || p));
-    if (fmt === 'pdf') { pageFlipRef.current?.turnToPage(n - 1); setCurrentPage(n); }
-    else setCurrentPage(n);
-  }, [fmt, totalPages]);
+    pageFlipRef.current?.turnToPage(n - 1);
+    setCurrentPage(n);
+  }, [totalPages]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -362,92 +188,55 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
         </div>
         {status === 'ready' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <input type="number" min={1} placeholder="pg" title="Jump to page"
-              onKeyDown={(e) => { if (e.key === 'Enter') { const p = parseInt((e.target as HTMLInputElement).value); if (!isNaN(p)) jumpToPage(p); (e.target as HTMLInputElement).value = ''; } }}
+            <input
+              type="number" min={1} placeholder="pg" title="Jump to page"
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  jumpToPage(parseInt((e.target as HTMLInputElement).value));
+                  (e.target as HTMLInputElement).value = '';
+                }
+              }}
               style={{ width: 44, padding: '3px 6px', background: 'rgba(10,5,2,0.6)', border: '1px solid rgba(200,168,75,0.2)', borderRadius: 3, color: '#C8A84B', fontFamily: "'Crimson Text',serif", fontSize: 12, outline: 'none', textAlign: 'center' }}
             />
             <span style={{ fontSize: 11, color: 'rgba(200,168,75,0.45)', fontFamily: "'Crimson Text',serif" }}>
-              {currentPage}{totalPages > 0 ? ` / ${totalPages}` : ''}
+              {currentPage} / {totalPages}
             </span>
           </div>
         )}
         <button onClick={() => setShowBookmark(true)} style={bookmarkBtnS}>🔖</button>
       </div>
 
-      {/* Reader body */}
+      {/* Reader area */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', background: 'radial-gradient(ellipse at center,#3D2210 0%,#1A0E06 100%)' }}>
 
-        {/* Loading overlay */}
         {(status === 'loading' || status === 'rendering') && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(14,8,5,0.96)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(14,8,5,0.95)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
             <div style={{ fontSize: 36, animation: 'candleFlicker 1.5s ease-in-out infinite' }}>🕯️</div>
             <p style={{ fontFamily: "'Cinzel',serif", color: '#C8A84B', fontSize: 15, margin: 0 }}>{loadMsg}</p>
-            <p style={{ fontFamily: "'Crimson Text',serif", color: 'rgba(200,168,75,0.3)', fontSize: 12, margin: 0 }}>Large books may take a moment…</p>
+            <p style={{ fontFamily: "'Crimson Text',serif", color: 'rgba(200,168,75,0.35)', fontSize: 12, margin: 0 }}>Large books may take a moment...</p>
           </div>
         )}
 
-        {/* Error */}
         {status === 'error' && (
-          <div style={{ maxWidth: 460, padding: 32, textAlign: 'center' }}>
+          <div style={{ maxWidth: 440, padding: 32, textAlign: 'center' }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>📜</div>
             <p style={{ fontFamily: "'Cinzel',serif", color: '#C8A84B', fontSize: 16, marginBottom: 12 }}>Could Not Open Book</p>
-            <p style={{ fontFamily: "'Crimson Text',serif", color: 'rgba(212,196,160,0.65)', fontSize: 14, lineHeight: 1.8, whiteSpace: 'pre-line' }}>{errorMsg}</p>
+            <p style={{ fontFamily: "'Crimson Text',serif", color: 'rgba(212,196,160,0.6)', fontSize: 14, lineHeight: 1.8 }}>{errorMsg}</p>
             {(book as any).fileUrl && (
-              <a href={(book as any).fileUrl} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'inline-block', marginTop: 20, color: '#C8A84B', fontSize: 13 }}>Open original link ↗</a>
+              <a href={(book as any).fileUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 20, color: '#C8A84B', fontSize: 13 }}>
+                Open original link ↗
+              </a>
             )}
           </div>
         )}
 
-        {/* PDF PageFlip */}
-        {fmt === 'pdf' && (
-          <>
-            {status === 'ready' && <button onClick={prevPage} style={{ ...arrowBtnS, left: 8 }}>‹</button>}
-            <div ref={flipContainerRef} style={{ visibility: status === 'ready' ? 'visible' : 'hidden' }} />
-            {status === 'ready' && <button onClick={nextPage} style={{ ...arrowBtnS, right: 8 }}>›</button>}
-          </>
-        )}
-
-        {/* EPUB — rendered as iframe with extracted chapter HTML */}
-        {fmt === 'epub' && status === 'ready' && (
-          <>
-            <button onClick={prevPage} style={{ ...arrowBtnS, left: 8 }}>‹</button>
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 60px', boxSizing: 'border-box' }}>
-              <iframe
-                key={currentPage}
-                src={txtPages[currentPage - 1]}
-                style={{
-                  width: '100%', height: '100%', border: 'none',
-                  background: '#FDFAF0',
-                  boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
-                  maxWidth: 720,
-                }}
-                sandbox="allow-same-origin"
-                title={`Chapter ${currentPage}`}
-              />
-            </div>
-            <button onClick={nextPage} style={{ ...arrowBtnS, right: 8 }}>›</button>
-          </>
-        )}
-        {/* Hidden epub container ref — kept for compatibility */}
-        <div ref={epubContainerRef} style={{ display: 'none' }} />
-
-        {/* TXT */}
-        {fmt === 'txt' && status === 'ready' && (
-          <>
-            <button onClick={prevPage} style={{ ...arrowBtnS, left: 8 }}>‹</button>
-            <div style={{ maxWidth: 680, width: '100%', height: '100%', background: '#FDFAF0', padding: '40px 48px', boxSizing: 'border-box', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.8)' }}>
-              <p style={{ fontFamily: "'Crimson Text',Georgia,serif", fontSize: 17, lineHeight: 1.85, color: '#1A0E05', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                {txtPages[currentPage - 1] ?? ''}
-              </p>
-            </div>
-            <button onClick={nextPage} style={{ ...arrowBtnS, right: 8 }}>›</button>
-          </>
-        )}
+        {status === 'ready' && <button onClick={prevPage} style={{ ...arrowBtnS, left: 8 }}>‹</button>}
+        <div ref={flipContainerRef} style={{ visibility: status === 'ready' ? 'visible' : 'hidden', boxShadow: status === 'ready' ? '0 20px 60px rgba(0,0,0,0.8)' : 'none' }} />
+        {status === 'ready' && <button onClick={nextPage} style={{ ...arrowBtnS, right: 8 }}>›</button>}
 
         {status === 'ready' && (
-          <p style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', fontSize: 10, color: 'rgba(200,168,75,0.2)', fontFamily: "'Crimson Text',serif", whiteSpace: 'nowrap', pointerEvents: 'none' }}>
-            ← → arrow keys · click edges to turn
+          <p style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', fontSize: 10, color: 'rgba(200,168,75,0.25)', fontFamily: "'Crimson Text',serif", whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+            ← → arrow keys · click edges · swipe to turn
           </p>
         )}
       </div>
@@ -466,8 +255,8 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
   return createPortal(reader, document.body);
 };
 
-const toolBtn: React.CSSProperties       = { background: 'transparent', border: '1px solid rgba(200,168,75,0.2)', color: 'rgba(212,196,160,0.55)', fontFamily: "'Crimson Text',serif", fontSize: 13, padding: '5px 12px', borderRadius: 3, cursor: 'pointer', flexShrink: 0 };
-const bookmarkBtnS: React.CSSProperties  = { background: 'linear-gradient(180deg,#C8A84B,#A87830)', border: 'none', borderRadius: '50%', width: 32, height: 32, fontSize: 14, cursor: 'pointer', flexShrink: 0 };
-const arrowBtnS: React.CSSProperties     = { position: 'absolute', top: '50%', transform: 'translateY(-50%)', background: 'rgba(200,168,75,0.1)', border: '1px solid rgba(200,168,75,0.2)', color: '#C8A84B', fontSize: 36, width: 44, height: 80, borderRadius: 4, cursor: 'pointer', zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const toolBtn: React.CSSProperties = { background: 'transparent', border: '1px solid rgba(200,168,75,0.2)', color: 'rgba(212,196,160,0.55)', fontFamily: "'Crimson Text',serif", fontSize: 13, padding: '5px 12px', borderRadius: 3, cursor: 'pointer', flexShrink: 0 };
+const bookmarkBtnS: React.CSSProperties = { background: 'linear-gradient(180deg,#C8A84B,#A87830)', border: 'none', borderRadius: '50%', width: 32, height: 32, fontSize: 14, cursor: 'pointer', flexShrink: 0 };
+const arrowBtnS: React.CSSProperties = { position: 'absolute', top: '50%', transform: 'translateY(-50%)', background: 'rgba(200,168,75,0.1)', border: '1px solid rgba(200,168,75,0.2)', color: '#C8A84B', fontSize: 36, width: 44, height: 80, borderRadius: 4, cursor: 'pointer', zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' };
 
 export default EReader;

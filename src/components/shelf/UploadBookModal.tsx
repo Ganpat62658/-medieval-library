@@ -18,7 +18,7 @@ interface UploadBookModalProps {
   onClose: () => void;
 }
 
-type BookFormat = 'pdf' | 'epub' | 'txt';
+type BookFormat = 'pdf';
 type Tab = 'local' | 'link';
 
 export default function UploadBookModal({
@@ -38,8 +38,6 @@ export default function UploadBookModal({
 
   const getFormat = (file: File): BookFormat | null => {
     if (file.name.endsWith('.pdf') || file.type === 'application/pdf') return 'pdf';
-    if (file.name.endsWith('.epub') || file.type === 'application/epub+zip') return 'epub';
-    if (file.name.endsWith('.txt') || file.type === 'text/plain') return 'txt';
     return null;
   };
 
@@ -47,7 +45,10 @@ export default function UploadBookModal({
     const file = e.target.files?.[0];
     if (!file) return;
     const fmt = getFormat(file);
-    if (!fmt) { setError('Only PDF, EPUB, and TXT files are supported.'); return; }
+    if (!fmt) {
+      setError('Only PDF files are supported. Convert your file to PDF free at ilovepdf.com or smallpdf.com');
+      return;
+    }
     setError('');
     setBookFile(file);
     setFormat(fmt);
@@ -162,7 +163,7 @@ export default function UploadBookModal({
                     : <span style={{ color: 'rgba(212,196,160,0.4)', fontSize: 13 }}>Click to choose · PDF, EPUB, or TXT</span>
                   }
                 </div>
-                <input ref={fileInputRef} type="file" accept=".pdf,.epub,.txt"
+                <input ref={fileInputRef} type="file" accept=".pdf,application/pdf"
                   style={{ display: 'none' }} onChange={handleFileSelect} />
               </div>
             )}
