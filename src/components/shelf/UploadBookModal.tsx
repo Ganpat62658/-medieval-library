@@ -187,7 +187,7 @@ export default function UploadBookModal({
               <div style={field}>
                 <label style={label}>FORMAT</label>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {(['pdf', 'epub', 'txt'] as BookFormat[]).map((f) => (
+                  {(['pdf'] as BookFormat[]).map((f) => (
                     <button key={f} onClick={() => setFormat(f)} style={{
                       flex: 1, padding: '8px 0',
                       background: format === f ? 'rgba(200,168,75,0.2)' : 'transparent',
