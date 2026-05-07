@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { ShelfRow, SlotType, UserRole } from '@/lib/types';
 
 interface EditRowModalProps {
@@ -25,8 +25,9 @@ export default function EditRowModal({ libraryId, row, userRole, onClose }: Edit
   const [columnCount, setColumnCount] = useState(row.columnsCount);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<{ colKey: string; bookId: string; title: string } | null>(null);
+  const [selectedBooks, setSelectedBooks] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const isOwner = userRole === 'owner';
 
   const currentCount = Object.keys(slots).length;
@@ -67,10 +68,12 @@ export default function EditRowModal({ libraryId, row, userRole, onClose }: Edit
   const toggleSlot = (key: string) => {
     const current = slots[key];
     if (current.type === 'book') {
-      // Only owners can delete books
       if (!isOwner || !current.bookId) return;
-      // Find book title from bookId for confirm dialog
-      setConfirmDelete({ colKey: key, bookId: current.bookId, title: `Book in column ${parseInt(key) + 1}` });
+      setSelectedBooks(prev => {
+        const next = new Set(prev);
+        next.has(key) ? next.delete(key) : next.add(key);
+        return next;
+      });
       return;
     }
     setSlots(prev => ({
@@ -79,21 +82,30 @@ export default function EditRowModal({ libraryId, row, userRole, onClose }: Edit
     }));
   };
 
-  const handleDeleteBook = async (colKey: string, bookId: string) => {
-    setDeletingBookId(bookId);
+  const handleDeleteSelected = async () => {
+    if (selectedBooks.size === 0) return;
+    setIsDeleting(true);
     setError('');
     try {
-      // Remove the book document
-      await deleteDoc(doc(db, 'libraries', libraryId, 'books', bookId));
-      // Reset slot back to dummy
+      const batch = writeBatch(db);
       const newSlots = { ...slots };
-      newSlots[colKey] = { type: 'dummy', bookId: null };
+      for (const colKey of selectedBooks) {
+        const slot = slots[colKey];
+        if (!slot?.bookId) continue;
+        const bookId = slot.bookId;
+        batch.delete(doc(db, 'libraries', libraryId, 'books', bookId));
+        const bmSnap = await getDocs(query(collection(db, 'bookmarks'), where('bookId', '==', bookId)));
+        bmSnap.docs.forEach(d => batch.delete(d.ref));
+        newSlots[colKey] = { type: 'dummy', bookId: null };
+      }
+      await batch.commit();
       setSlots(newSlots);
-      setConfirmDelete(null);
+      setSelectedBooks(new Set());
+      setShowDeleteConfirm(false);
     } catch (err: any) {
-      setError(err.message ?? 'Failed to delete book.');
+      setError(err.message ?? 'Failed to delete books.');
     } finally {
-      setDeletingBookId(null);
+      setIsDeleting(false);
     }
   };
 
@@ -179,7 +191,9 @@ export default function EditRowModal({ libraryId, row, userRole, onClose }: Edit
                     alignItems: 'center', justifyContent: 'center', gap: 2,
                     transition: 'all 0.15s',
                     fontSize: 10,
-                    opacity: deletingBookId === slot.bookId ? 0.4 : 1,
+                    opacity: isDeleting && selectedBooks.has(key) ? 0.4 : 1,
+                    outline: selectedBooks.has(key) ? '2px solid #E57373' : 'none',
+                    outlineOffset: 2,
                   }}
                 >
                   <span style={{ fontSize: 14 }}>
@@ -197,27 +211,34 @@ export default function EditRowModal({ libraryId, row, userRole, onClose }: Edit
           </p>
         </div>
 
-        {/* Confirm delete dialog */}
-      {confirmDelete && (
-        <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(229,115,115,0.3)', borderRadius: 6, padding: '14px 16px', marginBottom: 4 }}>
-          <p style={{ color: '#E57373', fontSize: 13, fontFamily: "'Cinzel',serif", margin: '0 0 8px' }}>
-            🗑️ Delete this book?
-          </p>
-          <p style={{ fontSize: 12, color: 'rgba(212,196,160,0.6)', margin: '0 0 12px', lineHeight: 1.5 }}>
-            Column {parseInt(confirmDelete.colKey) + 1} — this cannot be undone. The slot will become a dummy book.
+        {isOwner && selectedBooks.size > 0 && !showDeleteConfirm && (
+        <div style={{ background: 'rgba(192,57,43,0.12)', border: '1px solid rgba(229,115,115,0.3)', borderRadius: 6, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <p style={{ color: '#E57373', fontSize: 13, margin: 0, fontFamily: "'Cinzel',serif" }}>
+            🗑️ {selectedBooks.size} book{selectedBooks.size > 1 ? 's' : ''} selected
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              style={{ background: '#C0392B', border: 'none', borderRadius: 4, color: '#fff', fontFamily: "'Cinzel',serif", fontSize: 11, padding: '7px 14px', cursor: 'pointer', opacity: deletingBookId ? 0.6 : 1 }}
-              onClick={() => handleDeleteBook(confirmDelete.colKey, confirmDelete.bookId)}
-              disabled={!!deletingBookId}
-            >
-              {deletingBookId ? 'Deleting...' : 'Yes, Delete'}
+            <button style={{ background: '#C0392B', border: 'none', borderRadius: 4, color: '#fff', fontFamily: "'Cinzel',serif", fontSize: 11, fontWeight: 700, padding: '7px 14px', cursor: 'pointer' }} onClick={() => setShowDeleteConfirm(true)}>
+              Delete Selected
             </button>
-            <button
-              style={{ background: 'transparent', border: '1px solid rgba(200,168,75,0.2)', borderRadius: 4, color: 'rgba(212,196,160,0.5)', fontFamily: "'Crimson Text',serif", fontSize: 12, padding: '7px 14px', cursor: 'pointer' }}
-              onClick={() => setConfirmDelete(null)}
-            >
+            <button style={{ background: 'transparent', border: '1px solid rgba(200,168,75,0.2)', borderRadius: 4, color: 'rgba(212,196,160,0.5)', fontFamily: "'Crimson Text',serif", fontSize: 12, padding: '7px 12px', cursor: 'pointer' }} onClick={() => setSelectedBooks(new Set())}>
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+      {showDeleteConfirm && (
+        <div style={{ background: 'rgba(192,57,43,0.15)', border: '1px solid rgba(229,115,115,0.4)', borderRadius: 6, padding: '14px 16px' }}>
+          <p style={{ color: '#E57373', fontSize: 13, fontFamily: "'Cinzel',serif", margin: '0 0 6px', fontWeight: 700 }}>
+            ⚠️ Permanently delete {selectedBooks.size} book{selectedBooks.size > 1 ? 's' : ''}?
+          </p>
+          <p style={{ fontSize: 12, color: 'rgba(212,196,160,0.55)', margin: '0 0 12px', lineHeight: 1.6 }}>
+            All saved bookmarks will also be deleted. This cannot be undone.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={{ background: '#C0392B', border: 'none', borderRadius: 4, color: '#fff', fontFamily: "'Cinzel',serif", fontSize: 11, fontWeight: 700, padding: '8px 16px', cursor: 'pointer', opacity: isDeleting ? 0.6 : 1 }} onClick={handleDeleteSelected} disabled={isDeleting}>
+              {isDeleting ? '🗑️ Deleting...' : 'Yes, Delete All'}
+            </button>
+            <button style={{ background: 'transparent', border: '1px solid rgba(200,168,75,0.2)', borderRadius: 4, color: 'rgba(212,196,160,0.5)', fontFamily: "'Crimson Text',serif", fontSize: 12, padding: '8px 14px', cursor: 'pointer' }} onClick={() => setShowDeleteConfirm(false)}>
               Cancel
             </button>
           </div>
