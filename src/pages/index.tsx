@@ -210,7 +210,7 @@ service cloud.firestore {
 
       {showAddRow && <AddRowModal libraryId={libraryId} currentRowCount={rows.length} onClose={() => setShowAddRow(false)} />}
       {uploadTarget && <UploadBookModal libraryId={libraryId} rowIndex={uploadTarget.rowIndex} colIndex={uploadTarget.colIndex} rowId={uploadTarget.rowId} userId={authUser!.uid} onClose={() => setUploadTarget(null)} />}
-      {editingRow && <EditRowModal libraryId={libraryId} row={editingRow} onClose={() => setEditingRow(null)} />}
+      {editingRow && <EditRowModal libraryId={libraryId} row={editingRow} userRole={userProfile.role} onClose={() => setEditingRow(null)} />}
 
       {showAdvancedSearch && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,5,2,0.85)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

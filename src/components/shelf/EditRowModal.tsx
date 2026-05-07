@@ -4,16 +4,17 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { ShelfRow, SlotType } from '@/lib/types';
+import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { ShelfRow, SlotType, UserRole } from '@/lib/types';
 
 interface EditRowModalProps {
   libraryId: string;
   row: ShelfRow;
+  userRole: UserRole;
   onClose: () => void;
 }
 
-export default function EditRowModal({ libraryId, row, onClose }: EditRowModalProps) {
+export default function EditRowModal({ libraryId, row, userRole, onClose }: EditRowModalProps) {
   const [rowName, setRowName] = useState(row.name);
   const [slots, setSlots] = useState<Record<string, { type: SlotType; bookId: string | null }>>(
     // Deep copy slots, only keep non-book slots editable (books stay as books)
@@ -24,6 +25,9 @@ export default function EditRowModal({ libraryId, row, onClose }: EditRowModalPr
   const [columnCount, setColumnCount] = useState(row.columnsCount);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ colKey: string; bookId: string; title: string } | null>(null);
+  const isOwner = userRole === 'owner';
 
   const currentCount = Object.keys(slots).length;
 
@@ -62,11 +66,35 @@ export default function EditRowModal({ libraryId, row, onClose }: EditRowModalPr
   // Toggle a single slot between dummy and empty
   const toggleSlot = (key: string) => {
     const current = slots[key];
-    if (current.type === 'book') return; // Can't toggle book slots here
+    if (current.type === 'book') {
+      // Only owners can delete books
+      if (!isOwner || !current.bookId) return;
+      // Find book title from bookId for confirm dialog
+      setConfirmDelete({ colKey: key, bookId: current.bookId, title: `Book in column ${parseInt(key) + 1}` });
+      return;
+    }
     setSlots(prev => ({
       ...prev,
       [key]: { ...current, type: current.type === 'dummy' ? 'empty' : 'dummy' },
     }));
+  };
+
+  const handleDeleteBook = async (colKey: string, bookId: string) => {
+    setDeletingBookId(bookId);
+    setError('');
+    try {
+      // Remove the book document
+      await deleteDoc(doc(db, 'libraries', libraryId, 'books', bookId));
+      // Reset slot back to dummy
+      const newSlots = { ...slots };
+      newSlots[colKey] = { type: 'dummy', bookId: null };
+      setSlots(newSlots);
+      setConfirmDelete(null);
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to delete book.');
+    } finally {
+      setDeletingBookId(null);
+    }
   };
 
   const handleSave = async () => {
@@ -157,11 +185,38 @@ export default function EditRowModal({ libraryId, row, onClose }: EditRowModalPr
             ))}
           </div>
           <p style={{ fontSize: 11, color: 'rgba(212,196,160,0.35)', marginTop: 6 }}>
-            📖 = has a book &nbsp;·&nbsp; ▬ = dummy book &nbsp;·&nbsp; · = empty space
+            🗑️ = click to delete (owner only) &nbsp;·&nbsp; ▬ = dummy book &nbsp;·&nbsp; · = empty space
           </p>
         </div>
 
-        {error && <p style={errorStyle}>{error}</p>}
+        {/* Confirm delete dialog */}
+      {confirmDelete && (
+        <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(229,115,115,0.3)', borderRadius: 6, padding: '14px 16px', marginBottom: 4 }}>
+          <p style={{ color: '#E57373', fontSize: 13, fontFamily: "'Cinzel',serif", margin: '0 0 8px' }}>
+            🗑️ Delete this book?
+          </p>
+          <p style={{ fontSize: 12, color: 'rgba(212,196,160,0.6)', margin: '0 0 12px', lineHeight: 1.5 }}>
+            Column {parseInt(confirmDelete.colKey) + 1} — this cannot be undone. The slot will become a dummy book.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              style={{ background: '#C0392B', border: 'none', borderRadius: 4, color: '#fff', fontFamily: "'Cinzel',serif", fontSize: 11, padding: '7px 14px', cursor: 'pointer', opacity: deletingBookId ? 0.6 : 1 }}
+              onClick={() => handleDeleteBook(confirmDelete.colKey, confirmDelete.bookId)}
+              disabled={!!deletingBookId}
+            >
+              {deletingBookId ? 'Deleting...' : 'Yes, Delete'}
+            </button>
+            <button
+              style={{ background: 'transparent', border: '1px solid rgba(200,168,75,0.2)', borderRadius: 4, color: 'rgba(212,196,160,0.5)', fontFamily: "'Crimson Text',serif", fontSize: 12, padding: '7px 14px', cursor: 'pointer' }}
+              onClick={() => setConfirmDelete(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && <p style={errorStyle}>{error}</p>}
 
         <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
           <button style={{ ...goldBtn, opacity: saving ? 0.6 : 1 }} onClick={handleSave} disabled={saving}>
