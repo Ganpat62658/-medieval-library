@@ -160,7 +160,7 @@ export default function UploadBookModal({
                   onClick={() => fileInputRef.current?.click()}>
                   {bookFile
                     ? <span style={{ color: '#C8A84B', fontSize: 14 }}>📄 {bookFile.name} ({(bookFile.size / 1024 / 1024).toFixed(1)} MB)</span>
-                    : <span style={{ color: 'rgba(212,196,160,0.4)', fontSize: 13 }}>Click to choose · PDF, EPUB, or TXT</span>
+                    : <span style={{ color: 'rgba(212,196,160,0.4)', fontSize: 13 }}>Click to choose · PDF. Please note that EPUB and TXT and other formats are not supported yet.</span>
                   }
                 </div>
                 <input ref={fileInputRef} type="file" accept=".pdf,application/pdf"
