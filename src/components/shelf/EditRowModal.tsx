@@ -147,42 +147,50 @@ export default function EditRowModal({ libraryId, row, userRole, onClose }: Edit
         <div style={field}>
           <label style={label}>SLOT TYPES — click to toggle empty ↔ dummy</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 220, overflowY: 'auto', padding: 4 }}>
-            {slotEntries.map(([key, slot]) => (
-              <button
-                key={key}
-                onClick={() => toggleSlot(key)}
-                disabled={slot.type === 'book'}
-                title={
-                  slot.type === 'book' ? 'Contains a book — cannot change'
-                  : slot.type === 'dummy' ? 'Click to make empty'
-                  : 'Click to add dummy book'
-                }
-                style={{
-                  width: 36, height: 60, borderRadius: 2,
-                  border: `1px solid ${
-                    slot.type === 'book' ? 'rgba(200,168,75,0.6)'
-                    : slot.type === 'empty' ? 'rgba(200,168,75,0.2)'
-                    : 'rgba(200,168,75,0.3)'
-                  }`,
-                  background:
-                    slot.type === 'book' ? 'rgba(200,168,75,0.25)'
-                    : slot.type === 'empty' ? 'transparent'
-                    : 'rgba(74,28,10,0.4)',
-                  cursor: slot.type === 'book' ? 'default' : 'pointer',
-                  display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'center', gap: 2,
-                  transition: 'all 0.15s',
-                  fontSize: 10,
-                }}
-              >
-                <span style={{ fontSize: 14 }}>
-                  {slot.type === 'book' ? '📖' : slot.type === 'empty' ? '·' : '▬'}
-                </span>
-                <span style={{ fontSize: 7, color: 'rgba(200,168,75,0.5)', fontFamily: 'monospace' }}>
-                  {parseInt(key) + 1}
-                </span>
-              </button>
-            ))}
+            {slotEntries.map(([key, slot]) => {
+              const isBook = slot.type === 'book';
+              const canDelete = isBook && isOwner && !!slot.bookId;
+              return (
+                <button
+                  key={key}
+                  onClick={() => toggleSlot(key)}
+                  disabled={isBook && !isOwner}
+                  title={
+                    isBook
+                      ? (isOwner ? 'Click to delete this book' : 'Only owner can delete books')
+                      : slot.type === 'dummy' ? 'Click to make empty'
+                      : 'Click to add dummy book'
+                  }
+                  style={{
+                    width: 36, height: 60, borderRadius: 2,
+                    border: `1px solid ${
+                      isBook
+                        ? (isOwner ? 'rgba(229,115,115,0.6)' : 'rgba(200,168,75,0.6)')
+                        : slot.type === 'empty' ? 'rgba(200,168,75,0.2)'
+                        : 'rgba(200,168,75,0.3)'
+                    }`,
+                    background:
+                      isBook
+                        ? (isOwner ? 'rgba(192,57,43,0.2)' : 'rgba(200,168,75,0.15)')
+                        : slot.type === 'empty' ? 'transparent'
+                        : 'rgba(74,28,10,0.4)',
+                    cursor: (isBook && !isOwner) ? 'not-allowed' : 'pointer',
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', gap: 2,
+                    transition: 'all 0.15s',
+                    fontSize: 10,
+                    opacity: deletingBookId === slot.bookId ? 0.4 : 1,
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>
+                    {isBook ? (isOwner ? '🗑️' : '📖') : slot.type === 'empty' ? '·' : '▬'}
+                  </span>
+                  <span style={{ fontSize: 7, color: isBook && isOwner ? 'rgba(229,115,115,0.7)' : 'rgba(200,168,75,0.5)', fontFamily: 'monospace' }}>
+                    {parseInt(key) + 1}
+                  </span>
+                </button>
+              );
+            })}
           </div>
           <p style={{ fontSize: 11, color: 'rgba(212,196,160,0.35)', marginTop: 6 }}>
             🗑️ = click to delete (owner only) &nbsp;·&nbsp; ▬ = dummy book &nbsp;·&nbsp; · = empty space
