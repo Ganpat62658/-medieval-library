@@ -84,7 +84,7 @@ export default function EditRowModal({ libraryId, row, userRole, onClose }: Edit
       const batch = writeBatch(db);
       const newSlots = { ...slots };
 
-      for (const colKey of selectedCols) {
+      for (const colKey of Array.from(selectedCols)) {
         const slot = slots[colKey];
         if (!slot?.bookId) continue;
         const bookId = slot.bookId;
