@@ -113,7 +113,8 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
           await page.render({ canvasContext: ctx, viewport: vp }).promise;
 
           const wrapper = document.createElement('div');
-          wrapper.style.cssText = 'background:#FDFAF0;display:flex;align-items:center;justify-content:center;overflow:hidden;width:100%;height:100%;';
+          wrapper.className = 'page-wrapper';
+          wrapper.style.cssText = 'background:#FDFAF0;display:flex;align-items:center;justify-content:center;overflow:hidden;backface-visibility:hidden;';
           wrapper.appendChild(canvas);
           pageEls.push(wrapper);
         }
@@ -248,6 +249,9 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
       <style>{`
         @keyframes candleFlicker { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.7;transform:scale(0.97)} }
         .stf__parent { background: transparent !important; }
+        .page-wrapper {
+          box-shadow: inset 0 0 20px rgba(0,0,0,0.05);
+        }
       `}</style>
     </div>
   );

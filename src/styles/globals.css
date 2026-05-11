@@ -228,6 +228,9 @@ button, a, [role="button"], input, select, textarea {
   bottom: 18px;
   transform: translateX(-50%) rotate(-90deg);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
   font-family: var(--font-body);
   font-size: 7px;
   color: rgba(200, 168, 75, 0.65);
