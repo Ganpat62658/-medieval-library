@@ -6,7 +6,7 @@ import { auth, db } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import {
   collection, query, where, getDocs, addDoc, updateDoc,
-  doc, serverTimestamp, deleteDoc, getDoc, onSnapshot, writeBatch
+  doc, serverTimestamp, deleteDoc, getDoc, onSnapshot, writeBatch, deleteField
 } from 'firebase/firestore';
 import { UserProfile, InviteRequest } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -213,16 +213,9 @@ export default function HamburgerMenu({ isOpen, onClose, currentUser, directOpen
     try {
       const batch = writeBatch(db);
       batch.update(doc(db, 'users', currentUser.uid), { joinedLibraryId: null, role: 'owner' });
-      batch.update(doc(db, 'libraries', libraryId), { [`members.${currentUser.uid}`]: deleteDoc });
-      // Properly remove member field
-      await updateDoc(doc(db, 'users', currentUser.uid), { joinedLibraryId: null, role: 'owner' });
-      const libRef = doc(db, 'libraries', libraryId);
-      const libSnap = await getDoc(libRef);
-      if (libSnap.exists()) {
-        const members = libSnap.data().members ?? {};
-        delete members[currentUser.uid];
-        await updateDoc(libRef, { members });
-      }
+      batch.update(doc(db, 'libraries', libraryId), { [`members.${currentUser.uid}`]: deleteField() });
+      await batch.commit();
+
       msg('Left the library. Reloading...');
       setTimeout(() => window.location.reload(), 1200);
     } catch (err: any) { msg(err.message ?? 'Failed to leave.', 'error'); }

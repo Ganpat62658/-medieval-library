@@ -5,8 +5,9 @@
 
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
 import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { saveBookLocally } from '@/lib/localBooks';
 
 interface UploadBookModalProps {
@@ -77,6 +78,22 @@ export default function UploadBookModal({
         await saveBookLocally(tempId, bookFile);
       }
 
+      let finalFileUrl = shareableLink.trim() || null;
+      
+      // Upload to Firebase Storage so other members can read it
+      if (tab === 'local' && bookFile) {
+        try {
+          const fileRef = ref(storage, `libraries/${libraryId}/books/${tempId}/original.pdf`);
+          await uploadBytes(fileRef, bookFile);
+          const dlUrl = await getDownloadURL(fileRef);
+          // Prefer the Firebase Storage URL if upload succeeds
+          finalFileUrl = dlUrl;
+        } catch (err) {
+          console.error("Failed to upload to Firebase Storage:", err);
+          // Fall back to shareableLink if any
+        }
+      }
+
       // 2. Save metadata to Firestore
       const bookRef = await addDoc(collection(db, 'libraries', libraryId, 'books'), {
         title: title.trim(),
@@ -85,8 +102,8 @@ export default function UploadBookModal({
         uploadedBy: userId,
         uploadedAt: serverTimestamp(),
 
-        // The shareable link — used by other members who don't have it locally
-        fileUrl: shareableLink.trim() || null,
+        // The shareable link or Firebase Storage URL — used by other members who don't have it locally
+        fileUrl: finalFileUrl,
 
         // Whether this book has a local copy (only meaningful per-device)
         hasLocalCopy: tab === 'local',
@@ -206,7 +223,7 @@ export default function UploadBookModal({
             {/* Shareable link — shown in both tabs */}
             <div style={field}>
               <label style={label}>
-                {tab === 'local' ? 'SHAREABLE LINK FOR MEMBERS (OPTIONAL BUT RECOMMENDED)' : 'SHAREABLE LINK *'}
+                {tab === 'local' ? 'SHAREABLE LINK FOR MEMBERS (OPTIONAL)' : 'SHAREABLE LINK *'}
               </label>
               <input style={input} type="url"
                 placeholder="https://drive.google.com/... or https://dropbox.com/..."
