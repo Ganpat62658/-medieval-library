@@ -100,6 +100,8 @@ export interface UserProfile {
   role: UserRole;
   createdAt: Date;
   avatarUrl: string | null;
+  canUpload?: boolean;
+  canDelete?: boolean;
 }
 
 // Search result types
@@ -128,4 +130,21 @@ export interface AlgoliaBookRecord {
   pageStart?: number;
   pageEnd?: number;
   fullText?: string;
+}
+
+// ── Extended membership types ─────────────────────────────────────────────────
+export interface LibraryMemberExtended {
+  role: UserRole;
+  joinedAt: any;
+  displayName: string;
+  canDelete: boolean;   // owner-granted permission to delete books
+  canUpload: boolean;   // owner-granted permission to upload books
+}
+
+export interface BannedUser {
+  userId: string;
+  displayName: string;
+  publicId: string;
+  bannedAt: any;
+  bannedBy: string;
 }

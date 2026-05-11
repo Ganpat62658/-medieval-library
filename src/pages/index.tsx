@@ -128,7 +128,12 @@ export default function LibraryPage() {
     setUploadTarget({ rowIndex, colIndex, rowId: row.id });
   }, [rows]);
 
-  const canEdit = userProfile?.role === 'owner' || userProfile?.role === 'editor';
+  // canUpload: owner always, or member with canUpload permission
+  // canDelete: owner always, or member with canDelete permission
+  const memberData = (userProfile as any)?.memberData;
+  const canUpload = userProfile?.role === 'owner' || (memberData?.canUpload ?? false);
+  const canDelete = userProfile?.role === 'owner' || (memberData?.canDelete ?? false);
+  const canEdit = canUpload || userProfile?.role === 'owner';
   const libraryId = userProfile ? (userProfile.joinedLibraryId ?? userProfile.libraryId) : '';
 
   if (profileMissing) return (
@@ -187,19 +192,19 @@ service cloud.firestore {
             <span style={{ fontSize: 48 }}>📜</span>
             <p style={{ fontFamily: "'Cinzel',serif", color: '#C8A84B', fontSize: 20, margin: 0 }}>The shelves await their tomes.</p>
             <p style={{ color: 'rgba(212,196,160,0.5)', fontSize: 14, margin: 0 }}>Start by adding your first shelf row.</p>
-            {canEdit && <button style={{ ...goldBtn, fontSize: 15, padding: '13px 32px', marginTop: 8 }} onClick={() => setShowAddRow(true)}>✚ Add First Row</button>}
+            {userProfile?.role === 'owner' && <button style={{ ...goldBtn, fontSize: 15, padding: '13px 32px', marginTop: 8 }} onClick={() => setShowAddRow(true)}>✚ Add First Row</button>}
           </div>
         ) : (
           <>
             <VirtualizedShelf
               ref={shelfRef}
-              rows={rows} books={books} userRole={userProfile.role}
+              rows={rows} books={books} userRole={canDeleteBooks ? 'owner' : canUpload ? 'editor' : 'viewer'}
               highlightedBookId={highlightedBookId}
               onBookClick={(book) => { if (isGuarded()) return; setPromptBook(book); }}
               onSlotClick={handleSlotClick}
-              onEditRow={canEdit ? (row) => setEditingRow(row) : undefined}
+              onEditRow={userProfile?.role === 'owner' ? (row) => setEditingRow(row) : undefined}
             />
-            {canEdit && (
+            {userProfile?.role === 'owner' && (
               <button onClick={() => setShowAddRow(true)} style={{ position: 'absolute', bottom: 20, right: 20, background: 'linear-gradient(180deg,#C8A84B,#A87830)', color: '#1A0E06', border: 'none', borderRadius: 28, padding: '10px 20px', fontFamily: "'Cinzel',serif", fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.5)' }}>
                 ✚ Add Row
               </button>
@@ -210,7 +215,7 @@ service cloud.firestore {
 
       {showAddRow && <AddRowModal libraryId={libraryId} currentRowCount={rows.length} onClose={() => setShowAddRow(false)} />}
       {uploadTarget && <UploadBookModal libraryId={libraryId} rowIndex={uploadTarget.rowIndex} colIndex={uploadTarget.colIndex} rowId={uploadTarget.rowId} userId={authUser!.uid} onClose={() => setUploadTarget(null)} />}
-      {editingRow && <EditRowModal libraryId={libraryId} row={editingRow} userRole={userProfile.role} onClose={() => setEditingRow(null)} />}
+      {editingRow && <EditRowModal libraryId={libraryId} row={editingRow} userRole={canDeleteBooks ? 'owner' : canUpload ? 'editor' : 'viewer'} onClose={() => setEditingRow(null)} />}
 
       {showAdvancedSearch && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,5,2,0.85)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

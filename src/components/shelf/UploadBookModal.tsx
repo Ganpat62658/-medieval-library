@@ -160,7 +160,7 @@ export default function UploadBookModal({
                   onClick={() => fileInputRef.current?.click()}>
                   {bookFile
                     ? <span style={{ color: '#C8A84B', fontSize: 14 }}>📄 {bookFile.name} ({(bookFile.size / 1024 / 1024).toFixed(1)} MB)</span>
-                    : <span style={{ color: 'rgba(212,196,160,0.4)', fontSize: 13 }}>Click to choose · PDF. Please note that EPUB and TXT and other formats are not supported yet.</span>
+                    : <span style={{ color: 'rgba(212,196,160,0.4)', fontSize: 13 }}>Click to choose · PDF, EPUB, or TXT</span>
                   }
                 </div>
                 <input ref={fileInputRef} type="file" accept=".pdf,application/pdf"
@@ -187,7 +187,7 @@ export default function UploadBookModal({
               <div style={field}>
                 <label style={label}>FORMAT</label>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {(['pdf'] as BookFormat[]).map((f) => (
+                  {(['pdf', 'epub', 'txt'] as BookFormat[]).map((f) => (
                     <button key={f} onClick={() => setFormat(f)} style={{
                       flex: 1, padding: '8px 0',
                       background: format === f ? 'rgba(200,168,75,0.2)' : 'transparent',
