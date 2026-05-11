@@ -93,6 +93,29 @@ const BookSpine: React.FC<BookSpineProps> = ({ book, isHighlighted, onClick }) =
       >
         {book.format}
       </span>
+
+      {/* Local Only Indicator */}
+      {!book.fileUrl && (
+        <div
+          title="Local device only. Other members cannot read this book."
+          style={{
+            position: 'absolute',
+            bottom: '16px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            fontSize: '12px',
+            color: 'rgba(229, 115, 115, 0.9)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '2px'
+          }}
+        >
+          <span>🔒</span>
+          <span style={{ fontSize: '6px', color: '#E57373', letterSpacing: '0.1em', fontFamily: 'var(--font-body)', textTransform: 'uppercase' }}>Local</span>
+        </div>
+      )}
     </div>
   );
 };

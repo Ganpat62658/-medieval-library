@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { collection, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { ShelfRow, Book, UserProfile, SlotType } from '@/lib/types';
 import VirtualizedShelf, { VirtualizedShelfHandle } from '@/components/shelf/VirtualizedShelf';
 import SearchBar from '@/components/search/SearchBar';
