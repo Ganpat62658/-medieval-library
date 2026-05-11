@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { collection, doc, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { ShelfRow, Book, UserProfile, SlotType } from '@/lib/types';
 import VirtualizedShelf, { VirtualizedShelfHandle } from '@/components/shelf/VirtualizedShelf';
 import SearchBar from '@/components/search/SearchBar';
@@ -35,8 +35,6 @@ export default function LibraryPage() {
   const [promptBook, setPromptBook] = useState<Book | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [profileMissing, setProfileMissing] = useState(false);
-  const [libraryData, setLibraryData] = useState<any>(null);
-  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const shelfRef = React.useRef<VirtualizedShelfHandle>(null);
   // Timestamp-based guard — blocks shelf clicks for 500ms after any modal closes
   const clickGuardTime = React.useRef(0);
@@ -73,26 +71,6 @@ export default function LibraryPage() {
       else { setIsLoading(false); setProfileMissing(true); }
     });
   }, [authUser]);
-
-  useEffect(() => {
-    if (!userProfile?.libraryId) return;
-    const lid = userProfile.joinedLibraryId ?? userProfile.libraryId;
-    return onSnapshot(doc(db, 'libraries', lid), (snap) => {
-      setLibraryData(snap.data());
-    });
-  }, [userProfile]);
-
-  useEffect(() => {
-    if (userProfile?.role !== 'owner' || !userProfile.libraryId) return;
-    const q = query(
-      collection(db, 'libraries', userProfile.libraryId, 'inviteRequests'),
-      where('status', '==', 'pending'),
-      where('targetOwnerId', '==', userProfile.uid)
-    );
-    return onSnapshot(q, snap => {
-      setPendingRequestsCount(snap.docs.length);
-    });
-  }, [userProfile]);
 
   useEffect(() => {
     if (!userProfile?.libraryId) return;
@@ -150,12 +128,7 @@ export default function LibraryPage() {
     setUploadTarget({ rowIndex, colIndex, rowId: row.id });
   }, [rows]);
 
-  const isOwner = userProfile?.role === 'owner';
-  const memberPerms = libraryData?.members?.[authUser?.uid ?? ''] || {};
-  const canUpload = isOwner || memberPerms.canUpload === true;
-  const canDelete = isOwner || memberPerms.canDelete === true;
-  const canEdit = isOwner || canUpload || canDelete;
-  const canAddRow = canUpload;
+  const canEdit = userProfile?.role === 'owner' || userProfile?.role === 'editor';
   const libraryId = userProfile ? (userProfile.joinedLibraryId ?? userProfile.libraryId) : '';
 
   if (profileMissing) return (
@@ -203,14 +176,7 @@ service cloud.firestore {
           <div style={{ flex: 1, minWidth: 180 }}>
             <SearchBar libraryId={libraryId} rows={rows} onResultSelect={(m, a) => handleSearchResult(m, a)} onAdvancedToggle={() => setShowAdvancedSearch(v => !v)} directOpen={directOpen} />
           </div>
-          <button onClick={() => setMenuOpen(true)} style={{ background: 'none', border: 'none', color: '#C8A84B', fontSize: 24, cursor: 'pointer', flexShrink: 0, padding: '0 4px', position: 'relative' }}>
-            ☰
-            {pendingRequestsCount > 0 && (
-              <span style={{ position: 'absolute', top: -2, right: -4, background: '#E57373', color: '#fff', fontSize: 10, fontWeight: 'bold', width: 16, height: 16, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {pendingRequestsCount}
-              </span>
-            )}
-          </button>
+          <button onClick={() => setMenuOpen(true)} style={{ background: 'none', border: 'none', color: '#C8A84B', fontSize: 24, cursor: 'pointer', flexShrink: 0, padding: '0 4px' }}>☰</button>
         </div>
       </header>
 
@@ -233,7 +199,7 @@ service cloud.firestore {
               onSlotClick={handleSlotClick}
               onEditRow={canEdit ? (row) => setEditingRow(row) : undefined}
             />
-            {canAddRow && (
+            {canEdit && (
               <button onClick={() => setShowAddRow(true)} style={{ position: 'absolute', bottom: 20, right: 20, background: 'linear-gradient(180deg,#C8A84B,#A87830)', color: '#1A0E06', border: 'none', borderRadius: 28, padding: '10px 20px', fontFamily: "'Cinzel',serif", fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.5)' }}>
                 ✚ Add Row
               </button>
@@ -244,7 +210,7 @@ service cloud.firestore {
 
       {showAddRow && <AddRowModal libraryId={libraryId} currentRowCount={rows.length} onClose={() => setShowAddRow(false)} />}
       {uploadTarget && <UploadBookModal libraryId={libraryId} rowIndex={uploadTarget.rowIndex} colIndex={uploadTarget.colIndex} rowId={uploadTarget.rowId} userId={authUser!.uid} onClose={() => setUploadTarget(null)} />}
-      {editingRow && <EditRowModal libraryId={libraryId} row={editingRow} userRole={userProfile.role} canDelete={canDelete} onClose={() => setEditingRow(null)} />}
+      {editingRow && <EditRowModal libraryId={libraryId} row={editingRow} userRole={userProfile.role} onClose={() => setEditingRow(null)} />}
 
       {showAdvancedSearch && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,5,2,0.85)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

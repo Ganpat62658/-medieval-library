@@ -9,13 +9,11 @@ interface EditRowModalProps {
   libraryId: string;
   row: ShelfRow;
   userRole: UserRole;
-  canDelete: boolean;
   onClose: () => void;
 }
 
-export default function EditRowModal({ libraryId, row, userRole, canDelete, onClose }: EditRowModalProps) {
+export default function EditRowModal({ libraryId, row, userRole, onClose }: EditRowModalProps) {
   const isOwner = userRole === 'owner';
-  const hasDeletePerm = isOwner || canDelete;
 
   const [rowName, setRowName] = useState(row.name);
   const [slots, setSlots] = useState<Record<string, { type: SlotType; bookId: string | null }>>(
@@ -62,7 +60,7 @@ export default function EditRowModal({ libraryId, row, userRole, canDelete, onCl
   const handleSlotClick = (key: string) => {
     const slot = slots[key];
     if (slot.type === 'book') {
-      if (!hasDeletePerm) return;
+      if (!isOwner) return;
       setSelectedCols(prev => {
         const next = new Set(prev);
         if (next.has(key)) next.delete(key);
@@ -138,10 +136,10 @@ export default function EditRowModal({ libraryId, row, userRole, canDelete, onCl
       <div style={modalStyle}>
         <h2 style={titleStyle}>✏️ Edit Row</h2>
 
-        {/* Owner/Permission badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '6px 10px', background: hasDeletePerm ? 'rgba(200,168,75,0.08)' : 'rgba(255,255,255,0.03)', borderRadius: 4, border: '1px solid rgba(200,168,75,0.15)' }}>
-          <span style={{ fontSize: 12, color: hasDeletePerm ? '#C8A84B' : 'rgba(212,196,160,0.4)', fontFamily: "'Cinzel',serif" }}>
-            {hasDeletePerm ? '✨ You can delete books' : `${userRole} — cannot delete books`}
+        {/* Owner badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '6px 10px', background: isOwner ? 'rgba(200,168,75,0.08)' : 'rgba(255,255,255,0.03)', borderRadius: 4, border: '1px solid rgba(200,168,75,0.15)' }}>
+          <span style={{ fontSize: 12, color: isOwner ? '#C8A84B' : 'rgba(212,196,160,0.4)', fontFamily: "'Cinzel',serif" }}>
+            {isOwner ? '👑 Owner — can delete books' : `${userRole} — cannot delete books`}
           </span>
         </div>
 
@@ -168,7 +166,7 @@ export default function EditRowModal({ libraryId, row, userRole, canDelete, onCl
         {/* Slot grid */}
         <div style={field}>
           <label style={label}>
-            {hasDeletePerm
+            {isOwner
               ? 'SLOTS — tap book slots to select for deletion, tap others to toggle empty ↔ dummy'
               : 'SLOTS — tap to toggle empty ↔ dummy (books locked)'}
           </label>
@@ -180,22 +178,22 @@ export default function EditRowModal({ libraryId, row, userRole, canDelete, onCl
                 <button
                   key={key}
                   onClick={() => handleSlotClick(key)}
-                  disabled={isBook && !hasDeletePerm}
+                  disabled={isBook && !isOwner}
                   style={{
                     width: 36, height: 60, borderRadius: 3, flexShrink: 0,
                     border: isSelected
                       ? '2px solid #E57373'
                       : isBook
-                      ? (hasDeletePerm ? '1px solid rgba(229,115,115,0.5)' : '1px solid rgba(200,168,75,0.5)')
+                      ? (isOwner ? '1px solid rgba(229,115,115,0.5)' : '1px solid rgba(200,168,75,0.5)')
                       : slot.type === 'empty'
                       ? '1px dashed rgba(200,168,75,0.2)'
                       : '1px solid rgba(200,168,75,0.25)',
                     background: isSelected
                       ? 'rgba(192,57,43,0.3)'
                       : isBook
-                      ? (hasDeletePerm ? 'rgba(192,57,43,0.15)' : 'rgba(200,168,75,0.2)')
+                      ? (isOwner ? 'rgba(192,57,43,0.15)' : 'rgba(200,168,75,0.2)')
                       : slot.type === 'empty' ? 'transparent' : 'rgba(74,28,10,0.4)',
-                    cursor: (isBook && !hasDeletePerm) ? 'not-allowed' : 'pointer',
+                    cursor: (isBook && !isOwner) ? 'not-allowed' : 'pointer',
                     display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center', gap: 2,
                     transition: 'all 0.12s',
@@ -203,12 +201,12 @@ export default function EditRowModal({ libraryId, row, userRole, canDelete, onCl
                   }}
                   title={
                     isBook
-                      ? (hasDeletePerm ? (isSelected ? 'Click to deselect' : 'Click to select for deletion') : 'You do not have permission to delete books')
+                      ? (isOwner ? (isSelected ? 'Click to deselect' : 'Click to select for deletion') : 'Only owner can delete books')
                       : slot.type === 'dummy' ? 'Click to make empty' : 'Click to make dummy book'
                   }
                 >
                   <span style={{ fontSize: 13 }}>
-                    {isSelected ? '✓' : isBook ? (hasDeletePerm ? '🗑️' : '📖') : slot.type === 'empty' ? '·' : '▬'}
+                    {isSelected ? '✓' : isBook ? (isOwner ? '🗑️' : '📖') : slot.type === 'empty' ? '·' : '▬'}
                   </span>
                   <span style={{ fontSize: 7, color: isSelected ? '#E57373' : 'rgba(200,168,75,0.5)', fontFamily: 'monospace' }}>
                     {parseInt(key) + 1}
@@ -218,14 +216,14 @@ export default function EditRowModal({ libraryId, row, userRole, canDelete, onCl
             })}
           </div>
           <p style={{ fontSize: 11, color: 'rgba(212,196,160,0.35)', marginTop: 6 }}>
-            {hasDeletePerm
+            {isOwner
               ? '🗑️ = book (tap to select) · ▬ = dummy · · = empty'
               : '📖 = book (locked) · ▬ = dummy · · = empty'}
           </p>
         </div>
 
         {/* Selection action bar */}
-        {hasDeletePerm && selectedCols.size > 0 && !showDeleteConfirm && (
+        {isOwner && selectedCols.size > 0 && !showDeleteConfirm && (
           <div style={{ background: 'rgba(192,57,43,0.12)', border: '1px solid rgba(229,115,115,0.35)', borderRadius: 6, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
             <p style={{ color: '#E57373', fontSize: 13, margin: 0, fontFamily: "'Cinzel',serif", fontWeight: 700 }}>
               🗑️ {selectedCols.size} book{selectedCols.size !== 1 ? 's' : ''} selected

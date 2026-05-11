@@ -146,20 +146,11 @@ export default function UploadBookModal({
             </div>
 
             {/* Tab description */}
-            <div style={tabHint}>
-              {tab === 'local' ? (
-                <>
-                  <p style={{ margin: '0 0 6px', color: 'rgba(212,196,160,0.6)' }}>
-                    The file is saved <strong>only on this specific device</strong>.
-                  </p>
-                  <p style={{ margin: 0, color: '#E57373', fontSize: 11, fontStyle: 'normal' }}>
-                    ⚠️ To allow other library members to read this book, you MUST provide a shareable link below.
-                  </p>
-                </>
-              ) : (
-                'Paste a Google Drive or Dropbox link. Anyone in the library can open it.'
-              )}
-            </div>
+            <p style={tabHint}>
+              {tab === 'local'
+                ? 'The file is saved on this device. Add a shareable link below so library members can also read it.'
+                : 'Paste a Google Drive or Dropbox link. Anyone in the library can open it.'}
+            </p>
 
             {/* Local file picker */}
             {tab === 'local' && (

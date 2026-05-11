@@ -1,12 +1,13 @@
+'use client';
 // src/components/ui/HamburgerMenu.tsx
+// Contains: Logout, Join Library (invite system), pending requests (for owners)
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import {
   collection, query, where, getDocs, addDoc, updateDoc,
-  doc, serverTimestamp, deleteDoc, getDoc, onSnapshot, writeBatch, deleteField
+  doc, serverTimestamp, deleteDoc, getDoc,
 } from 'firebase/firestore';
 import { UserProfile, InviteRequest } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -21,133 +22,80 @@ interface HamburgerMenuProps {
   onBookmarkPromptChange: (v: boolean) => void;
 }
 
-// ── Toggle component ───────────────────────────────────────────────────────────
-function Toggle({ value, onChange, label, hint }: { value: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px' }}>
-      <div>
-        <p style={{ margin: 0, fontSize: 13, color: '#F4E8C1', fontFamily: "'Crimson Text',serif" }}>{label}</p>
-        {hint && <p style={{ margin: '2px 0 0', fontSize: 11, color: 'rgba(212,196,160,0.4)', fontFamily: "'Crimson Text',serif" }}>{hint}</p>}
-      </div>
-      <button onClick={() => onChange(!value)} style={{ width: 44, height: 24, borderRadius: 12, border: 'none', background: value ? 'linear-gradient(90deg,#C8A84B,#A87830)' : 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
-        <span style={{ position: 'absolute', top: 3, left: value ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }} />
-      </button>
-    </div>
-  );
-}
-
-// ── Main component ─────────────────────────────────────────────────────────────
-export default function HamburgerMenu({ isOpen, onClose, currentUser, directOpen, onDirectOpenChange, bookmarkPrompt, onBookmarkPromptChange }: HamburgerMenuProps) {
-  const isOwner = currentUser.role === 'owner';
-  const isJoined = !!currentUser.joinedLibraryId;
-  const libraryId = currentUser.joinedLibraryId ?? currentUser.libraryId;
-
-  const [view, setView] = useState<'main' | 'join' | 'requests' | 'members' | 'banned' | 'settings'>('main');
+const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
+  isOpen,
+  onClose,
+  currentUser,
+  directOpen,
+  onDirectOpenChange,
+  bookmarkPrompt,
+  onBookmarkPromptChange,
+}) => {
+  const [view, setView] = useState<'main' | 'join' | 'requests'>('main');
   const [targetPublicId, setTargetPublicId] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [pendingRequests, setPendingRequests] = useState<InviteRequest[]>([]);
   const [generatedCodes, setGeneratedCodes] = useState<Record<string, string>>({});
-  const [members, setMembers] = useState<Array<{ uid: string; displayName: string; role: string; canDelete: boolean; canUpload: boolean }>>([]);
-  const [bannedUsers, setBannedUsers] = useState<Array<{ userId: string; displayName: string; publicId: string }>>([]);
-  const [expandedMember, setExpandedMember] = useState<string | null>(null);
-  const [blockRequests, setBlockRequests] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const msg = (text: string, type: 'success' | 'error' = 'success') => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage(null), 3500);
-  };
+  const isOwner = currentUser.role === 'owner';
 
-  // Load library settings (blockRequests)
+  // Fetch pending requests for owners
   useEffect(() => {
     if (!isOwner || !isOpen) return;
-    const unsub = onSnapshot(doc(db, 'libraries', libraryId), snap => {
-      if (snap.exists()) setBlockRequests(snap.data()?.blockRequests ?? false);
-    });
-    return unsub;
-  }, [isOwner, isOpen, libraryId]);
 
-  // Load pending requests (real-time) for owner
-  useEffect(() => {
-    if (!isOwner || !isOpen) return;
-    const q = query(
-      collection(db, 'libraries', libraryId, 'inviteRequests'),
-      where('status', '==', 'pending'),
-      where('targetOwnerId', '==', currentUser.uid)
-    );
-    const unsub = onSnapshot(q, snap => {
-      setPendingRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as InviteRequest)));
-    });
-    return unsub;
-  }, [isOwner, isOpen, libraryId, currentUser.uid]);
+    const fetchRequests = async () => {
+      const q = query(
+        collection(db, 'libraries', currentUser.libraryId, 'inviteRequests'),
+        where('status', '==', 'pending'),
+        where('targetOwnerId', '==', currentUser.uid)
+      );
+      const snap = await getDocs(q);
+      const reqs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InviteRequest));
+      setPendingRequests(reqs);
+    };
 
-  // Load members for owner
-  useEffect(() => {
-    if (!isOwner || view !== 'members' || !isOpen) return;
-    getDoc(doc(db, 'libraries', libraryId)).then(snap => {
-      if (!snap.exists()) return;
-      const data = snap.data();
-      const mems = Object.entries(data.members ?? {})
-        .filter(([uid]) => uid !== currentUser.uid)
-        .map(([uid, m]: [string, any]) => ({
-          uid, displayName: m.displayName, role: m.role,
-          canDelete: m.canDelete ?? false,
-          canUpload: m.canUpload ?? false,
-        }));
-      setMembers(mems);
-    });
-  }, [isOwner, view, isOpen, libraryId, currentUser.uid]);
+    fetchRequests();
+  }, [isOpen, isOwner, currentUser]);
 
-  // Load banned users
-  useEffect(() => {
-    if (!isOwner || view !== 'banned' || !isOpen) return;
-    getDocs(collection(db, 'libraries', libraryId, 'bannedUsers')).then(snap => {
-      setBannedUsers(snap.docs.map(d => d.data() as any));
-    });
-  }, [isOwner, view, isOpen, libraryId]);
-
-  // ── Block requests toggle ─────────────────────────────────────────────────
-  const handleBlockRequests = async (v: boolean) => {
-    setBlockRequests(v);
-    await updateDoc(doc(db, 'libraries', libraryId), { blockRequests: v });
-    msg(v ? 'Join requests are now blocked.' : 'Join requests are now allowed.');
-  };
-
-  // ── Request to join ───────────────────────────────────────────────────────
+  // ── Request to join someone's library ─────────────────────────────────────
   const handleRequestJoin = async () => {
     if (!targetPublicId.trim()) return;
     setIsLoading(true);
+    setMessage(null);
+
     try {
-      const usersQ = query(collection(db, 'users'), where('publicId', '==', targetPublicId.trim().toUpperCase()));
-      const usersSnap = await getDocs(usersQ);
-      if (usersSnap.empty) { msg('No user found with that ID.', 'error'); return; }
+      // Find the target user by publicId
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('publicId', '==', targetPublicId.trim().toUpperCase())
+      );
+      const usersSnap = await getDocs(usersQuery);
+
+      if (usersSnap.empty) {
+        setMessage({ text: 'No user found with that ID.', type: 'error' });
+        return;
+      }
 
       const targetUser = usersSnap.docs[0].data() as UserProfile;
-      const targetLibId = targetUser.libraryId;
 
-      // Check if target is blocking requests
-      const libSnap = await getDoc(doc(db, 'libraries', targetLibId));
-      if (libSnap.data()?.blockRequests) {
-        msg('This library is not accepting join requests right now.', 'error'); return;
-      }
-
-      // Check if requester is banned
-      const banSnap = await getDoc(doc(db, 'libraries', targetLibId, 'bannedUsers', currentUser.uid));
-      if (banSnap.exists()) {
-        msg('You have been banned from this library.', 'error'); return;
-      }
-
-      // Check for existing pending request
-      const existQ = query(
-        collection(db, 'libraries', targetLibId, 'inviteRequests'),
+      // Check if there's already a pending request from this user to that owner
+      const existingQ = query(
+        collection(db, 'libraries', targetUser.libraryId, 'inviteRequests'),
         where('requesterId', '==', currentUser.uid),
+        where('targetOwnerId', '==', targetUser.uid),
         where('status', '==', 'pending')
       );
-      const existSnap = await getDocs(existQ);
-      if (!existSnap.empty) { msg('You already have a pending request to this library.', 'error'); return; }
+      const existingSnap = await getDocs(existingQ);
 
-      await addDoc(collection(db, 'libraries', targetLibId, 'inviteRequests'), {
+      if (!existingSnap.empty) {
+        setMessage({ text: 'You already have a pending request to this library.', type: 'error' });
+        return;
+      }
+
+      // Create the request
+      await addDoc(collection(db, 'libraries', targetUser.libraryId, 'inviteRequests'), {
         requesterId: currentUser.uid,
         requesterName: currentUser.displayName,
         requesterPublicId: currentUser.publicId,
@@ -157,296 +105,380 @@ export default function HamburgerMenu({ isOpen, onClose, currentUser, directOpen
         resolvedAt: null,
       });
 
-      msg('Request sent! Wait for the owner to generate your code.');
+      setMessage({ text: 'Request sent! Wait for the owner to generate your code.', type: 'success' });
       setTargetPublicId('');
-    } catch (err: any) { msg(err.message ?? 'Failed to send request.', 'error'); }
-    finally { setIsLoading(false); }
+    } catch (err) {
+      console.error(err);
+      setMessage({ text: 'Failed to send request. Try again.', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // ── Enter invite code ─────────────────────────────────────────────────────
+  // ── Enter a code to join ───────────────────────────────────────────────────
   const handleEnterCode = async () => {
     if (!inviteCode.trim()) return;
     setIsLoading(true);
+    setMessage(null);
+
     try {
+      // Find the code across all libraries (search by code value)
+      // In production, you'd use a Cloud Function for security
       const code = inviteCode.trim().toUpperCase();
-      const codeQ = query(collection(db, 'globalInviteCodes'), where('code', '==', code), where('forRequesterId', '==', currentUser.uid), where('used', '==', false));
-      const codeSnap = await getDocs(codeQ);
-      if (codeSnap.empty) { msg('Invalid or expired code.', 'error'); return; }
+
+      // We need to know which library to look in — normally the user knows this
+      // or you store a global codes collection. Here we check the user's pending requests.
+      // For simplicity, we add a top-level /inviteCodes collection pointing to the library.
+      const codeQuery = query(
+        collection(db, 'globalInviteCodes'),
+        where('code', '==', code),
+        where('forRequesterId', '==', currentUser.uid),
+        where('used', '==', false)
+      );
+      const codeSnap = await getDocs(codeQuery);
+
+      if (codeSnap.empty) {
+        setMessage({ text: 'Invalid or expired code.', type: 'error' });
+        return;
+      }
 
       const codeDoc = codeSnap.docs[0];
       const codeData = codeDoc.data();
-      if (codeData.expiresAt.toDate() < new Date()) { msg('This code has expired.', 'error'); return; }
 
+      // Check expiry
+      if (codeData.expiresAt.toDate() < new Date()) {
+        setMessage({ text: 'This code has expired.', type: 'error' });
+        return;
+      }
+
+      // Mark code as used
       await updateDoc(codeDoc.ref, { used: true });
-      await updateDoc(doc(db, 'users', currentUser.uid), { joinedLibraryId: codeData.libraryId, role: 'viewer' });
-      await updateDoc(doc(db, 'libraries', codeData.libraryId), {
-        [`members.${currentUser.uid}`]: { role: 'viewer', joinedAt: serverTimestamp(), displayName: currentUser.displayName, canDelete: false, canUpload: false },
+
+      // Update the user's profile to join this library as viewer
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        joinedLibraryId: codeData.libraryId,
+        role: 'viewer',
       });
-      await updateDoc(doc(db, 'libraries', codeData.libraryId, 'inviteRequests', codeData.forRequestId), { status: 'approved', resolvedAt: serverTimestamp() });
 
-      msg('🎉 You joined the library! Reloading...');
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err: any) { msg(err.message ?? 'Failed to apply code.', 'error'); }
-    finally { setIsLoading(false); }
+      // Add user to library members
+      await updateDoc(doc(db, 'libraries', codeData.libraryId), {
+        [`members.${currentUser.uid}`]: {
+          role: 'viewer',
+          joinedAt: serverTimestamp(),
+          displayName: currentUser.displayName,
+        },
+      });
+
+      // Mark the request as approved
+      await updateDoc(
+        doc(db, 'libraries', codeData.libraryId, 'inviteRequests', codeData.forRequestId),
+        { status: 'approved', resolvedAt: serverTimestamp() }
+      );
+
+      setMessage({ text: '🎉 You joined the library! Reload to see it.', type: 'success' });
+    } catch (err) {
+      console.error(err);
+      setMessage({ text: 'Failed to apply code.', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // ── Generate code for requester ───────────────────────────────────────────
+  // ── Owner generates a code for a requester ────────────────────────────────
   const handleGenerateCode = async (request: InviteRequest) => {
-    const code = uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await addDoc(collection(db, 'globalInviteCodes'), {
-      code, generatedBy: currentUser.uid, libraryId,
-      forRequestId: request.id, forRequesterId: request.requesterId,
-      used: false, createdAt: serverTimestamp(), expiresAt,
-    });
-    setGeneratedCodes(prev => ({ ...prev, [request.id]: code }));
-  };
-
-  const handleRejectRequest = async (request: InviteRequest) => {
-    await updateDoc(doc(db, 'libraries', libraryId, 'inviteRequests', request.id), { status: 'rejected', resolvedAt: serverTimestamp() });
-  };
-
-  // ── Leave library ─────────────────────────────────────────────────────────
-  const handleLeave = async () => {
-    if (!isJoined) return;
     setIsLoading(true);
     try {
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'users', currentUser.uid), { joinedLibraryId: null, role: 'owner' });
-      batch.update(doc(db, 'libraries', libraryId), { [`members.${currentUser.uid}`]: deleteField() });
-      await batch.commit();
+      const code = uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase();
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-      msg('Left the library. Reloading...');
-      setTimeout(() => window.location.reload(), 1200);
-    } catch (err: any) { msg(err.message ?? 'Failed to leave.', 'error'); }
-    finally { setIsLoading(false); }
-  };
-
-  // ── Update member permission ──────────────────────────────────────────────
-  const updateMemberPermission = async (uid: string, field: 'canDelete' | 'canUpload' | 'role', value: any) => {
-    await updateDoc(doc(db, 'libraries', libraryId), { [`members.${uid}.${field}`]: value });
-    setMembers(prev => prev.map(m => m.uid === uid ? { ...m, [field]: value } : m));
-  };
-
-  // ── Kick member ───────────────────────────────────────────────────────────
-  const handleKick = async (uid: string, displayName: string) => {
-    try {
-      await updateDoc(doc(db, 'users', uid), { joinedLibraryId: null, role: 'owner' });
-      const libSnap = await getDoc(doc(db, 'libraries', libraryId));
-      if (libSnap.exists()) {
-        const mems = libSnap.data().members ?? {};
-        delete mems[uid];
-        await updateDoc(doc(db, 'libraries', libraryId), { members: mems });
-      }
-      setMembers(prev => prev.filter(m => m.uid !== uid));
-      setExpandedMember(null);
-      msg(`${displayName} has been kicked.`);
-    } catch (err: any) { msg(err.message ?? 'Failed to kick.', 'error'); }
-  };
-
-  // ── Ban member ────────────────────────────────────────────────────────────
-  const handleBan = async (uid: string, displayName: string, publicId: string) => {
-    try {
-      await handleKick(uid, displayName);
-      await updateDoc(doc(db, 'libraries', libraryId, 'bannedUsers', uid), {});
-      // Use setDoc instead
-      const { setDoc } = await import('firebase/firestore');
-      await setDoc(doc(db, 'libraries', libraryId, 'bannedUsers', uid), {
-        userId: uid, displayName, publicId, bannedAt: serverTimestamp(), bannedBy: currentUser.uid,
+      // Store in a global collection for lookup
+      await addDoc(collection(db, 'globalInviteCodes'), {
+        code,
+        generatedBy: currentUser.uid,
+        libraryId: currentUser.libraryId,
+        forRequestId: request.id,
+        forRequesterId: request.requesterId,
+        used: false,
+        createdAt: serverTimestamp(),
+        expiresAt,
       });
-      msg(`${displayName} has been banned.`);
-    } catch (err: any) { msg(err.message ?? 'Failed to ban.', 'error'); }
+
+      setGeneratedCodes((prev) => ({ ...prev, [request.id]: code }));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // ── Unban user ────────────────────────────────────────────────────────────
-  const handleUnban = async (userId: string, displayName: string) => {
+  // ── Owner rejects a request ───────────────────────────────────────────────
+  const handleRejectRequest = async (request: InviteRequest) => {
     try {
-      await deleteDoc(doc(db, 'libraries', libraryId, 'bannedUsers', userId));
-      setBannedUsers(prev => prev.filter(u => u.userId !== userId));
-      msg(`${displayName} has been unbanned.`);
-    } catch (err: any) { msg(err.message ?? 'Failed to unban.', 'error'); }
+      await updateDoc(
+        doc(db, 'libraries', currentUser.libraryId, 'inviteRequests', request.id),
+        { status: 'rejected', resolvedAt: serverTimestamp() }
+      );
+      setPendingRequests((prev) => prev.filter((r) => r.id !== request.id));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  if (!isOpen) return null;
-
-  const panel = (
+  return (
     <>
       {/* Backdrop */}
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 49, background: 'rgba(0,0,0,0.4)' }} />
+      {isOpen && (
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 49,
+            background: 'rgba(0,0,0,0.4)',
+          }}
+        />
+      )}
 
       {/* Menu panel */}
-      <div style={{ position: 'fixed', top: 0, right: 0, width: 300, height: '100vh', background: 'linear-gradient(180deg,#2C1A0E,#1A0E06)', borderLeft: '1px solid rgba(200,168,75,0.25)', zIndex: 50, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 30px rgba(0,0,0,0.6)', overflowY: 'auto' }}>
-
-        {/* Header */}
-        <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid rgba(200,168,75,0.1)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontFamily: "'Cinzel',serif", fontSize: 15, color: '#C8A84B', margin: 0 }}>☰ Library Menu</h2>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(212,196,160,0.4)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+      <div className={`hamburger-menu ${isOpen ? 'open' : ''}`}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '0' }}>
+          {/* Header */}
+          <div style={{ marginBottom: '24px' }}>
+            <h2 style={{
+              fontFamily: 'var(--font-display)', fontSize: '16px',
+              color: 'var(--leather-gold)', letterSpacing: '0.1em',
+            }}>
+              ☰ Library Menu
+            </h2>
+            <p style={{ fontSize: '12px', color: 'var(--parchment-dark)', marginTop: '4px' }}>
+              Your ID: <strong style={{ color: 'var(--leather-gold)' }}>{currentUser.publicId}</strong>
+            </p>
           </div>
-          <p style={{ fontSize: 11, color: 'rgba(212,196,160,0.4)', margin: '4px 0 0', fontFamily: "'Crimson Text',serif" }}>
-            Your ID: <strong style={{ color: '#C8A84B', letterSpacing: '0.1em' }}>{currentUser.publicId}</strong>
-          </p>
-        </div>
 
-        <div style={{ flex: 1, padding: '8px 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Navigation items */}
+          <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+            {/* Join Library */}
+            <MenuButton
+              icon="📖"
+              label="Join a Library"
+              onClick={() => setView(view === 'join' ? 'main' : 'join')}
+              active={view === 'join'}
+            />
 
-          {/* JOIN SECTION */}
-          {!isJoined && (
-            <Section label="📖 Join a Library" expanded={view === 'join'} onToggle={() => setView(view === 'join' ? 'main' : 'join')}>
-              <p style={hintText}>Enter an owner's Public ID to request access, or enter a code you received.</p>
-              <Label>OWNER'S PUBLIC ID</Label>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                <input style={smallInput} value={targetPublicId} onChange={e => setTargetPublicId(e.target.value.toUpperCase())} placeholder="e.g. AB12CD34" maxLength={8} />
-                <button style={goldBtnSm} onClick={handleRequestJoin} disabled={isLoading}>Request</button>
-              </div>
-              <Label>ENTER INVITE CODE</Label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input style={smallInput} value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())} placeholder="8-char code" maxLength={8} />
-                <button style={goldBtnSm} onClick={handleEnterCode} disabled={isLoading}>Join</button>
-              </div>
-            </Section>
-          )}
-
-          {/* LEAVE LIBRARY */}
-          {isJoined && (
-            <MenuBtn icon="🚪" label="Leave Library" onClick={handleLeave} danger />
-          )}
-
-          {/* OWNER SECTIONS */}
-          {isOwner && (
-            <>
-              {/* Join Requests */}
-              <Section
-                label={`📬 Join Requests${pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ''}`}
-                expanded={view === 'requests'}
-                onToggle={() => setView(view === 'requests' ? 'main' : 'requests')}
-              >
-                {pendingRequests.length === 0 ? (
-                  <p style={hintText}>No pending requests.</p>
-                ) : pendingRequests.map(req => (
-                  <div key={req.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(200,168,75,0.08)' }}>
-                    <p style={{ fontSize: 12, color: '#F4E8C1', margin: '0 0 2px', fontFamily: "'Crimson Text',serif" }}><strong>{req.requesterName}</strong></p>
-                    <p style={{ fontSize: 10, color: 'rgba(212,196,160,0.4)', margin: '0 0 8px' }}>ID: {req.requesterPublicId}</p>
-                    {generatedCodes[req.id] ? (
-                      <div style={{ background: 'rgba(200,168,75,0.08)', borderRadius: 4, padding: '8px 10px', textAlign: 'center' }}>
-                        <p style={{ fontSize: 10, color: 'rgba(212,196,160,0.5)', margin: '0 0 4px' }}>Share this code:</p>
-                        <p style={{ fontFamily: 'monospace', fontSize: 18, color: '#C8A84B', letterSpacing: '0.2em', margin: 0 }}>{generatedCodes[req.id]}</p>
-                        <p style={{ fontSize: 9, color: 'rgba(200,168,75,0.4)', margin: '4px 0 0' }}>Expires in 24 hours</p>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button style={goldBtnSm} onClick={() => handleGenerateCode(req)}>Generate Code</button>
-                        <button style={dangerBtnSm} onClick={() => handleRejectRequest(req)}>Reject</button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </Section>
-
-              {/* Members */}
-              <Section label="👥 Members" expanded={view === 'members'} onToggle={() => setView(view === 'members' ? 'main' : 'members')}>
-                {members.length === 0 ? (
-                  <p style={hintText}>No members have joined yet.</p>
-                ) : members.map(member => (
-                  <div key={member.uid} style={{ borderBottom: '1px solid rgba(200,168,75,0.07)', paddingBottom: 8, marginBottom: 8 }}>
-                    <button
-                      onClick={() => setExpandedMember(expandedMember === member.uid ? null : member.uid)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}
-                    >
-                      <span style={{ fontSize: 13, color: '#F4E8C1', fontFamily: "'Crimson Text',serif" }}>{member.displayName}</span>
-                      <span style={{ fontSize: 10, color: 'rgba(200,168,75,0.4)' }}>{member.role} {expandedMember === member.uid ? '▲' : '▼'}</span>
-                    </button>
-
-                    {expandedMember === member.uid && (
-                      <div style={{ paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <MiniToggle label="Can upload books" value={member.canUpload} onChange={v => updateMemberPermission(member.uid, 'canUpload', v)} />
-                        <MiniToggle label="Can delete books" value={member.canDelete} onChange={v => updateMemberPermission(member.uid, 'canDelete', v)} />
-                        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                          <button style={dangerBtnSm} onClick={() => handleKick(member.uid, member.displayName)}>Kick</button>
-                          <button style={{ ...dangerBtnSm, background: 'rgba(120,0,0,0.4)', borderColor: 'rgba(200,50,50,0.4)' }} onClick={() => handleBan(member.uid, member.displayName, '')}>Ban</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </Section>
-
-              {/* Banned Users */}
-              <Section label="🚫 Banned Users" expanded={view === 'banned'} onToggle={() => setView(view === 'banned' ? 'main' : 'banned')}>
-                {bannedUsers.length === 0 ? (
-                  <p style={hintText}>No banned users.</p>
-                ) : bannedUsers.map(u => (
-                  <div key={u.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(200,168,75,0.07)' }}>
-                    <span style={{ fontSize: 12, color: '#F4E8C1', fontFamily: "'Crimson Text',serif" }}>{u.displayName || u.userId.slice(0, 8)}</span>
-                    <button style={goldBtnSm} onClick={() => handleUnban(u.userId, u.displayName)}>Unban</button>
-                  </div>
-                ))}
-              </Section>
-            </>
-          )}
-
-          {/* SETTINGS */}
-          <Section label="⚙️ Settings" expanded={view === 'settings'} onToggle={() => setView(view === 'settings' ? 'main' : 'settings')}>
-            <Toggle value={directOpen} onChange={onDirectOpenChange} label="Quick Open" hint="Skip confirm dialog when clicking search results" />
-            <Toggle value={bookmarkPrompt} onChange={onBookmarkPromptChange} label="Bookmark Prompt" hint="Show saved bookmarks when opening from search" />
+            {/* Pending requests (owners only) */}
             {isOwner && (
-              <Toggle value={blockRequests} onChange={handleBlockRequests} label="Block Join Requests" hint="Nobody can send join requests while this is on" />
+              <MenuButton
+                icon="📬"
+                label={`Join Requests ${pendingRequests.length > 0 ? `(${pendingRequests.length})` : ''}`}
+                onClick={() => setView(view === 'requests' ? 'main' : 'requests')}
+                active={view === 'requests'}
+              />
             )}
-          </Section>
 
-          <div style={{ height: 1, background: 'rgba(200,168,75,0.1)', margin: '4px 12px' }} />
-          <MenuBtn icon="🚪" label="Sign Out" onClick={() => signOut(auth)} danger />
+            {/* Expanded Join view */}
+            {view === 'join' && (
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: '4px', padding: '14px',
+                marginTop: '4px',
+              }}>
+                <p style={{ fontSize: '12px', color: 'var(--parchment-dark)', marginBottom: '12px' }}>
+                  Enter owner's public ID to request access, or enter a code if you have one.
+                </p>
+
+                {/* Request join */}
+                <label style={{ fontSize: '10px', color: 'var(--leather-gold)', letterSpacing: '0.1em', display: 'block', marginBottom: '4px' }}>
+                  OWNER'S PUBLIC ID
+                </label>
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                  <input
+                    className="search-input"
+                    value={targetPublicId}
+                    onChange={(e) => setTargetPublicId(e.target.value.toUpperCase())}
+                    placeholder="e.g. AB12CD34"
+                    maxLength={8}
+                    style={{ flex: 1, fontSize: '12px', padding: '6px 10px' }}
+                  />
+                  <button className="btn-primary" onClick={handleRequestJoin} disabled={isLoading} style={{ fontSize: '11px', padding: '6px 10px' }}>
+                    Request
+                  </button>
+                </div>
+
+                {/* Enter code */}
+                <label style={{ fontSize: '10px', color: 'var(--leather-gold)', letterSpacing: '0.1em', display: 'block', marginBottom: '4px' }}>
+                  ENTER INVITE CODE
+                </label>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    className="search-input"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                    placeholder="8-char code"
+                    maxLength={8}
+                    style={{ flex: 1, fontSize: '12px', padding: '6px 10px' }}
+                  />
+                  <button className="btn-primary" onClick={handleEnterCode} disabled={isLoading} style={{ fontSize: '11px', padding: '6px 10px' }}>
+                    Join
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Pending requests (owner view) */}
+            {view === 'requests' && isOwner && (
+              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '4px', padding: '14px', marginTop: '4px' }}>
+                {pendingRequests.length === 0 ? (
+                  <p style={{ fontSize: '12px', color: 'var(--parchment-dark)', textAlign: 'center' }}>
+                    No pending requests.
+                  </p>
+                ) : (
+                  pendingRequests.map((req) => (
+                    <div key={req.id} style={{
+                      padding: '10px 0',
+                      borderBottom: '1px solid rgba(200,168,75,0.1)',
+                      marginBottom: '8px',
+                    }}>
+                      <p style={{ fontSize: '12px', color: 'var(--parchment)' }}>
+                        <strong>{req.requesterName}</strong>
+                      </p>
+                      <p style={{ fontSize: '10px', color: 'var(--parchment-dark)' }}>
+                        ID: {req.requesterPublicId}
+                      </p>
+
+                      {generatedCodes[req.id] ? (
+                        <div style={{ marginTop: '6px', padding: '8px', background: 'rgba(200,168,75,0.1)', borderRadius: '3px', textAlign: 'center' }}>
+                          <p style={{ fontSize: '10px', color: 'var(--parchment-dark)' }}>Share this code:</p>
+                          <p style={{ fontFamily: 'monospace', fontSize: '16px', color: 'var(--leather-gold)', letterSpacing: '0.2em' }}>
+                            {generatedCodes[req.id]}
+                          </p>
+                          <p style={{ fontSize: '9px', color: 'rgba(200,168,75,0.5)' }}>Expires in 24 hours</p>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                          <button className="btn-primary" onClick={() => handleGenerateCode(req)} style={{ fontSize: '10px', padding: '4px 10px', flex: 1 }}>
+                            Generate Code
+                          </button>
+                          <button className="btn-secondary" onClick={() => handleRejectRequest(req)} style={{ fontSize: '10px', padding: '4px 10px' }}>
+                            Reject
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Direct-open toggle */}
+            <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--parchment)', fontFamily: 'var(--font-body)' }}>
+                  Quick Open
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: 'rgba(212,196,160,0.4)', fontFamily: 'var(--font-body)' }}>
+                  Skip confirm dialog when clicking a search result
+                </p>
+              </div>
+              <button
+                onClick={() => onDirectOpenChange(!directOpen)}
+                style={{
+                  width: 44, height: 24, borderRadius: 12, border: 'none',
+                  background: directOpen ? 'linear-gradient(90deg,#C8A84B,#A87830)' : 'rgba(255,255,255,0.1)',
+                  cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 3, left: directOpen ? 22 : 3,
+                  width: 18, height: 18, borderRadius: '50%',
+                  background: '#fff', transition: 'left 0.2s', display: 'block',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                }} />
+              </button>
+            </div>
+
+            {/* Bookmark prompt toggle */}
+            <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--parchment)', fontFamily: 'var(--font-body)' }}>
+                  Bookmark Prompt
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: 'rgba(212,196,160,0.4)', fontFamily: 'var(--font-body)' }}>
+                  Show saved bookmarks when opening from search
+                </p>
+              </div>
+              <button
+                onClick={() => onBookmarkPromptChange(!bookmarkPrompt)}
+                style={{
+                  width: 44, height: 24, borderRadius: 12, border: 'none',
+                  background: bookmarkPrompt ? 'linear-gradient(90deg,#C8A84B,#A87830)' : 'rgba(255,255,255,0.1)',
+                  cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 3, left: bookmarkPrompt ? 22 : 3,
+                  width: 18, height: 18, borderRadius: '50%',
+                  background: '#fff', transition: 'left 0.2s', display: 'block',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                }} />
+              </button>
+            </div>
+
+            {/* Separator */}
+            <div style={{ height: '1px', background: 'rgba(200,168,75,0.1)', margin: '12px 0' }} />
+
+            {/* Logout */}
+            <MenuButton
+              icon="🚪"
+              label="Logout"
+              onClick={() => signOut(auth)}
+              danger
+            />
+          </nav>
+
+          {/* Status message */}
+          {message && (
+            <div style={{
+              padding: '10px 12px', borderRadius: '4px', fontSize: '12px',
+              background: message.type === 'success' ? 'rgba(46, 125, 50, 0.2)' : 'rgba(192, 57, 43, 0.2)',
+              color: message.type === 'success' ? '#81C784' : '#E57373',
+              border: `1px solid ${message.type === 'success' ? 'rgba(129,199,132,0.3)' : 'rgba(229,115,115,0.3)'}`,
+            }}>
+              {message.text}
+            </div>
+          )}
         </div>
-
-        {message && (
-          <div style={{ margin: '0 12px 12px', padding: '10px 12px', borderRadius: 4, fontSize: 12, background: message.type === 'success' ? 'rgba(46,125,50,0.2)' : 'rgba(192,57,43,0.2)', color: message.type === 'success' ? '#81C784' : '#E57373', border: `1px solid ${message.type === 'success' ? 'rgba(129,199,132,0.3)' : 'rgba(229,115,115,0.3)'}` }}>
-            {message.text}
-          </div>
-        )}
       </div>
     </>
   );
+};
 
-  return createPortal(panel, document.body);
-}
+const MenuButton: React.FC<{
+  icon: string;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  danger?: boolean;
+}> = ({ icon, label, onClick, active, danger }) => (
+  <button
+    onClick={onClick}
+    style={{
+      display: 'flex', alignItems: 'center', gap: '10px',
+      padding: '10px 12px', borderRadius: '4px', border: 'none',
+      background: active ? 'rgba(200,168,75,0.1)' : 'transparent',
+      color: danger ? '#E57373' : active ? 'var(--leather-gold)' : 'var(--parchment)',
+      cursor: 'pointer', textAlign: 'left', fontSize: '14px',
+      fontFamily: 'var(--font-body)',
+      transition: 'background 0.15s, color 0.15s',
+      width: '100%',
+    }}
+    onMouseEnter={(e) => {
+      if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
+    }}
+    onMouseLeave={(e) => {
+      if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+    }}
+  >
+    <span>{icon}</span>
+    <span>{label}</span>
+  </button>
+);
 
-// ── Small helpers ──────────────────────────────────────────────────────────────
-function Section({ label, expanded, onToggle, children }: { label: string; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
-  return (
-    <div>
-      <button onClick={onToggle} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: expanded ? 'rgba(200,168,75,0.06)' : 'transparent', border: 'none', borderLeft: expanded ? '2px solid rgba(200,168,75,0.4)' : '2px solid transparent', cursor: 'pointer', color: expanded ? '#C8A84B' : 'rgba(212,196,160,0.7)', fontFamily: "'Crimson Text',serif", fontSize: 13, textAlign: 'left', transition: 'all 0.15s' }}>
-        {label}
-        <span style={{ fontSize: 10, opacity: 0.6 }}>{expanded ? '▲' : '▼'}</span>
-      </button>
-      {expanded && <div style={{ padding: '8px 16px 12px' }}>{children}</div>}
-    </div>
-  );
-}
-
-function MenuBtn({ icon, label, onClick, danger }: { icon: string; label: string; onClick: () => void; danger?: boolean }) {
-  return (
-    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: 'transparent', border: 'none', color: danger ? '#E57373' : 'rgba(212,196,160,0.7)', cursor: 'pointer', fontSize: 13, fontFamily: "'Crimson Text',serif", width: '100%', textAlign: 'left' }}>
-      <span>{icon}</span><span>{label}</span>
-    </button>
-  );
-}
-
-function MiniToggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-      <span style={{ fontSize: 12, color: 'rgba(212,196,160,0.6)', fontFamily: "'Crimson Text',serif" }}>{label}</span>
-      <button onClick={() => onChange(!value)} style={{ width: 36, height: 20, borderRadius: 10, border: 'none', background: value ? 'linear-gradient(90deg,#C8A84B,#A87830)' : 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
-        <span style={{ position: 'absolute', top: 2, left: value ? 17 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
-      </button>
-    </div>
-  );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <p style={{ fontSize: 10, color: '#C8A84B', letterSpacing: '0.1em', fontFamily: "'Cinzel',serif", margin: '0 0 4px' }}>{children}</p>;
-}
-
-const hintText: React.CSSProperties = { fontSize: 12, color: 'rgba(212,196,160,0.4)', margin: '0 0 10px', lineHeight: 1.6, fontFamily: "'Crimson Text',serif" };
-const smallInput: React.CSSProperties = { flex: 1, background: 'rgba(10,5,2,0.6)', border: '1px solid rgba(200,168,75,0.2)', borderRadius: 4, color: '#F4E8C1', fontFamily: "'Crimson Text',serif", fontSize: 13, padding: '6px 10px', outline: 'none' };
-const goldBtnSm: React.CSSProperties = { background: 'linear-gradient(180deg,#C8A84B,#A87830)', color: '#1A0E06', fontFamily: "'Cinzel',serif", fontSize: 10, fontWeight: 700, padding: '6px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', flexShrink: 0 };
-const dangerBtnSm: React.CSSProperties = { background: 'rgba(192,57,43,0.2)', color: '#E57373', fontFamily: "'Cinzel',serif", fontSize: 10, padding: '6px 12px', border: '1px solid rgba(229,115,115,0.3)', borderRadius: 4, cursor: 'pointer', flexShrink: 0 };
+export default HamburgerMenu;
