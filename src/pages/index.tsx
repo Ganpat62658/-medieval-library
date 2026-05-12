@@ -133,6 +133,7 @@ export default function LibraryPage() {
   const memberData = (userProfile as any)?.memberData;
   const canUpload = userProfile?.role === 'owner' || (memberData?.canUpload ?? false);
   const canDelete = userProfile?.role === 'owner' || (memberData?.canDelete ?? false);
+  const canDeleteBooks = canDelete;
   const canEdit = canUpload || userProfile?.role === 'owner';
   const libraryId = userProfile ? (userProfile.joinedLibraryId ?? userProfile.libraryId) : '';
 
