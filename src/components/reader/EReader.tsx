@@ -112,9 +112,21 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           await page.render({ canvasContext: ctx, viewport: vp }).promise;
 
+          // Convert canvas → <img> via toDataURL so page-flip can clone pages
+          // during the flip animation without losing pixel data.
+          // Canvas elements always clone as blank (cloneNode copies no pixels),
+          // which is what causes the black fill artifact mid-animation.
+          const imgW = Math.floor(vp.width / dpr);
+          const imgH = Math.floor(vp.height / dpr);
+          const img = document.createElement('img');
+          img.src = canvas.toDataURL('image/jpeg', 0.92);
+          img.width  = imgW;
+          img.height = imgH;
+          img.style.cssText = `display:block;width:${imgW}px;height:${imgH}px;`;
+
           const wrapper = document.createElement('div');
           wrapper.style.cssText = 'background:#FDFAF0;display:flex;align-items:center;justify-content:center;overflow:hidden;width:100%;height:100%;';
-          wrapper.appendChild(canvas);
+          wrapper.appendChild(img);
           pageEls.push(wrapper);
         }
 
@@ -135,9 +147,10 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
         const { PageFlip } = await import('page-flip');
         if (cancelled) return;
 
-        const firstCanvas = pageEls[0]?.firstChild as HTMLCanvasElement | null;
-        const pageW = firstCanvas ? parseInt(firstCanvas.style.width)  || Math.floor(firstCanvas.width / dpr)  : displayW;
-        const pageH = firstCanvas ? parseInt(firstCanvas.style.height) || Math.floor(firstCanvas.height / dpr) : 800;
+        // Dimensions come from the first <img> (canvas was converted to img above).
+        const firstImg = pageEls[0]?.firstChild as HTMLImageElement | null;
+        const pageW = firstImg ? firstImg.width  : displayW;
+        const pageH = firstImg ? firstImg.height : 800;
 
         // Give the container an explicit background so the dark parent never
         // bleeds through the gap between pages during the flip animation.
