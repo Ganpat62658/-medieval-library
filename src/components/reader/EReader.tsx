@@ -121,6 +121,15 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
         if (cancelled || !flipContainerRef.current) return;
         setLoadMsg('Binding the book...');
 
+        // page-flip needs an even page count when showCover:false; pad with a
+        // blank page if needed — otherwise the last real page bleeds its empty
+        // neighbour slot during a flip, producing a white/ghost artifact.
+        if (pageEls.length % 2 !== 0) {
+          const blank = document.createElement('div');
+          blank.style.cssText = 'background:#FDFAF0;width:100%;height:100%;';
+          pageEls.push(blank);
+        }
+
         // ── PageFlip ──────────────────────────────────────────────────────
         flipContainerRef.current.innerHTML = '';
         const { PageFlip } = await import('page-flip');
@@ -139,13 +148,19 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
           drawShadow: true, flippingTime: 650,
           usePortrait: isMobile, autoSize: true,
           showCover: false, mobileScrollSupport: false,
-          swipeDistance: 20, clickEventForward: true, startZIndex: 0,
+          swipeDistance: 20, clickEventForward: true, startZIndex: 1,
         });
 
         flipBook.loadFromHTML(pageEls);
         pageFlipRef.current = flipBook;
         if (initialPage > 1) setTimeout(() => flipBook.turnToPage(initialPage - 1), 100);
+        // Use 'changeState' so the page counter updates only after the flip
+        // animation finishes, not at its start — prevents mid-animation glitches.
         flipBook.on('flip', (e: any) => setCurrentPage(e.data + 1));
+        flipBook.on('changeState', () => {
+          const idx = pageFlipRef.current?.getCurrentPageIndex?.();
+          if (idx != null) setCurrentPage(idx + 1);
+        });
         if (!cancelled) setStatus('ready');
 
       } catch (err: any) {
