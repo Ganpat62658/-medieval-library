@@ -464,14 +464,14 @@ export default function HamburgerMenu({
               <p style={{ margin: 0, fontSize: 13, color: '#F4E8C1', fontFamily: "'Crimson Text',serif" }}>Quick Open</p>
               <p style={{ margin: '2px 0 0', fontSize: 11, color: 'rgba(212,196,160,0.35)', fontFamily: "'Crimson Text',serif" }}>Skip confirm when clicking search result</p>
             </div>
-            <ToggleSwitch value={directOpen} onChange={onDirectOpenChange} />
+            <ToggleSwitch value={directOpen} onChange={() => onDirectOpenChange(!directOpen)} />
           </div>
           <div style={{ padding: '6px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <p style={{ margin: 0, fontSize: 13, color: '#F4E8C1', fontFamily: "'Crimson Text',serif" }}>Bookmark Prompt</p>
               <p style={{ margin: '2px 0 0', fontSize: 11, color: 'rgba(212,196,160,0.35)', fontFamily: "'Crimson Text',serif" }}>Show bookmarks when opening from search</p>
             </div>
-            <ToggleSwitch value={bookmarkPrompt} onChange={onBookmarkPromptChange} />
+            <ToggleSwitch value={bookmarkPrompt} onChange={() => onBookmarkPromptChange(!bookmarkPrompt)} />
           </div>
 
           <div style={divider} />
@@ -480,7 +480,7 @@ export default function HamburgerMenu({
 
         {/* Message */}
         {message && (
-          <div style={{ padding: '10px 16px', margin: '0 0 8px', borderRadius: 4, fontSize: 12, background: message.type === 'success' ? 'rgba(46,125,50,0.2)' : 'rgba(192,57,43,0.2)', color: message.type === 'success' ? '#81C784' : '#E57373', border: `1px solid ${message.type === 'success' ? 'rgba(129,199,132,0.3)' : 'rgba(229,115,115,0.3)'}`, margin: '0 16px 12px' }}>
+          <div style={{ padding: '10px 16px', margin: '0 16px 12px', borderRadius: 4, fontSize: 12, background: message.type === 'success' ? 'rgba(46,125,50,0.2)' : 'rgba(192,57,43,0.2)', color: message.type === 'success' ? '#81C784' : '#E57373', border: `1px solid ${message.type === 'success' ? 'rgba(129,199,132,0.3)' : 'rgba(229,115,115,0.3)'}` }}>
             {message.text}
           </div>
         )}
@@ -510,9 +510,9 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   );
 }
 
-function ToggleSwitch({ value, onChange, danger }: { value: boolean; onChange: () => void; danger?: boolean }) {
+function ToggleSwitch({ value, onChange, danger }: { value: boolean; onChange: ((v: boolean) => void) | (() => void); danger?: boolean }) {
   return (
-    <button onClick={onChange} style={{ width: 40, height: 22, borderRadius: 11, border: 'none', background: value ? (danger ? 'linear-gradient(90deg,#C0392B,#922B21)' : 'linear-gradient(90deg,#C8A84B,#A87830)') : 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
+    <button onClick={() => (onChange as any)()} style={{ width: 40, height: 22, borderRadius: 11, border: 'none', background: value ? (danger ? 'linear-gradient(90deg,#C0392B,#922B21)' : 'linear-gradient(90deg,#C8A84B,#A87830)') : 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
       <span style={{ position: 'absolute', top: 3, left: value ? 20 : 3, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }} />
     </button>
   );
