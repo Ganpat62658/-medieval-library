@@ -139,14 +139,20 @@ const EReader: React.FC<EReaderProps> = ({ book, userId, libraryId, initialPage 
         const pageW = firstCanvas ? parseInt(firstCanvas.style.width)  || Math.floor(firstCanvas.width / dpr)  : displayW;
         const pageH = firstCanvas ? parseInt(firstCanvas.style.height) || Math.floor(firstCanvas.height / dpr) : 800;
 
+        // Give the container an explicit background so the dark parent never
+        // bleeds through the gap between pages during the flip animation.
+        flipContainerRef.current.style.background = '#FDFAF0';
+
+        // Use size:'fixed' — 'stretch' + autoSize:true fight each other and
+        // cause page-flip to miscalculate page boundaries, making the animation
+        // peel from the wrong edge and position.
         const flipBook = new PageFlip(flipContainerRef.current, {
           width: pageW, height: pageH,
-          size: 'stretch',
-          minWidth: isMobile ? 280 : 320,
-          maxWidth: isMobile ? window.innerWidth : 650,
-          minHeight: 350, maxHeight: 950,
+          size: 'fixed',
+          minWidth: pageW, maxWidth: pageW,
+          minHeight: pageH, maxHeight: pageH,
           drawShadow: true, flippingTime: 650,
-          usePortrait: isMobile, autoSize: true,
+          usePortrait: isMobile, autoSize: false,
           showCover: false, mobileScrollSupport: false,
           swipeDistance: 20, clickEventForward: true, startZIndex: 1,
         });
